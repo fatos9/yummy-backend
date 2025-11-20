@@ -12,6 +12,7 @@ import notificationsRouter from "./routes/notifications.js";
 import ratingRouter from "./routes/rating.js";
 import categoriesRouter from "./routes/categories.js";
 import allergenRouter from "./routes/allergen.js";
+import authRouter from "./routes/auth.js";
 
 const app = express();
 app.use(cors());
@@ -31,6 +32,7 @@ app.use("/notifications", notificationsRouter);
 app.use("/rating", ratingRouter);
 app.use("/categories", categoriesRouter);
 app.use("/allergens", allergenRouter);
+app.use("/auth", authRouter);
 
 // Start server
 app.listen(process.env.PORT, () => {
