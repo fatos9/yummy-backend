@@ -10,6 +10,7 @@ import matchRouter from "./routes/match.js";
 import messagesRouter from "./routes/messages.js";
 import notificationsRouter from "./routes/notifications.js";
 import ratingRouter from "./routes/rating.js";
+import categoriesRouter from "./routes/categories.js";
 
 const app = express();
 app.use(cors());
@@ -27,6 +28,7 @@ app.use("/match", matchRouter);
 app.use("/chat", messagesRouter);
 app.use("/notifications", notificationsRouter);
 app.use("/rating", ratingRouter);
+app.use("/categories", categoriesRouter);
 
 // Start server
 app.listen(process.env.PORT, () => {
