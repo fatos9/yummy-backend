@@ -13,7 +13,6 @@ app.use(express.json());
 // Firebase token doğrulama
 const auth = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
-
   if (!token) return res.status(401).send("Token yok");
 
   try {
@@ -26,27 +25,69 @@ const auth = async (req, res, next) => {
   }
 };
 
-// Test endpoint (auth yok)
+// Test endpoint
 app.get("/", (req, res) => {
   res.send("Yummy Yum backend çalışıyor 🎉");
 });
 
-// DB test
-app.get("/db-test", async (req, res) => {
+// Öğün ekleme
+app.post("/meals", auth, async (req, res) => {
   try {
-    const result = await pool.query("SELECT NOW()");
+    const {
+      name,
+      category,
+      image_url,
+      restaurant_name,
+      allergens,
+      user_location,
+      restaurant_location
+    } = req.body;
+
+    if (!name || !image_url)
+      return res.status(400).send("name ve image_url zorunlu");
+
+    const userId = req.user.uid;
+
+    const query = `
+      INSERT INTO meals (
+        name, image_url, category, user_id,
+        restaurant_name, allergens,
+        user_location, restaurant_location
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      RETURNING *;
+    `;
+
+    const values = [
+      name,
+      image_url,
+      category,
+      userId,
+      restaurant_name,
+      allergens || null,
+      user_location || null,
+      restaurant_location || null,
+    ];
+
+    const result = await pool.query(query, values);
     res.send(result.rows[0]);
   } catch (err) {
-    console.log(err);
-    res.status(500).send("DB hatası");
+    console.error("Meal ekleme hatası:", err);
+    res.status(500).send("Server hatası");
   }
 });
 
-// Örnek korumalı route
-app.get("/me", auth, (req, res) => {
-  res.send({ user: req.user });
+// Öğün listeleme
+app.get("/meals", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM meals ORDER BY createdat DESC");
+    res.send(result.rows);
+  } catch (err) {
+    console.error("Meal listeleme hatası:", err);
+    res.status(500).send("Server hatası");
+  }
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Server başlatıldı ✔");
+// ⭐ LİSTENİ EN ALTA KOY
+app.listen(process.env.PORT, () => {
+  console.log("Server başlatıldı ✔ PORT:", process.env.PORT);
 });
