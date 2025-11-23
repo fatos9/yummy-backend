@@ -7,23 +7,65 @@ export const getProfile = async (req, res) => {
   try {
     const uid = req.params.uid;
 
-    const user = await pool.query(
-      "SELECT * FROM auth_users WHERE firebase_uid = $1",
+    // USER
+    const userQuery = await pool.query(
+      `
+      SELECT firebase_uid AS uid, email, username, photo_url, rating, points
+      FROM auth_users
+      WHERE firebase_uid = $1
+      LIMIT 1
+      `,
       [uid]
     );
 
-    if (user.rows.length === 0)
+    if (userQuery.rows.length === 0) {
       return res.status(404).json({ error: "bulunamadı" });
+    }
 
-    res.json(user.rows[0]);
+    const user = userQuery.rows[0];
+
+    // MEALS
+    const mealsQuery = await pool.query(
+      `
+      SELECT *
+      FROM meals
+      WHERE user_id = $1
+      ORDER BY createdat DESC
+      `,
+      [uid]
+    );
+
+    // MATCH COUNT
+    const matchQuery = await pool.query(
+      `
+      SELECT COUNT(*) AS count
+      FROM match_requests
+      WHERE (from_user_id = $1 OR to_user_id = $1)
+      AND status = 'accepted'
+      `,
+      [uid]
+    );
+
+    const matchCount = Number(matchQuery.rows[0].count) || 0;
+
+    // **FRONTEND'İN BEKLEDİĞİ DOĞRU JSON**
+    return res.json({
+      uid: user.uid,
+      email: user.email,
+      username: user.username,
+      photo_url: user.photo_url,
+      rating: user.rating,
+      points: user.points,
+
+      meals: mealsQuery.rows,
+      matchCount: matchCount,
+    });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("🔥 getProfile error:", err);
+    return res.status(500).json({ error: "Server hatası" });
   }
 };
-
-
-
 
 /**
  * POST /profile
