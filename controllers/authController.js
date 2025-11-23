@@ -8,13 +8,14 @@ export const registerUser = async (req, res) => {
   try {
     const { firebase_uid, email, username } = req.body;
 
-    if (!firebase_uid || !email) {
-      return res.status(400).json({ error: "Eksik alan" });
+    console.log("📥 Register BODY:", req.body);
+
+    if (!firebase_uid) {
+      return res.status(400).json({ error: "firebase_uid eksik" });
     }
 
-    // Kullanıcı zaten var mı?
     const existing = await pool.query(
-      `SELECT * FROM auth_users WHERE firebase_uid = $1 LIMIT 1`,
+      `SELECT * FROM auth_users WHERE firebase_uid = $1`,
       [firebase_uid]
     );
 
@@ -22,18 +23,16 @@ export const registerUser = async (req, res) => {
       return res.json({ user: existing.rows[0] });
     }
 
-    // Yeni ekle
     const insert = await pool.query(
       `INSERT INTO auth_users (firebase_uid, email, username)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [firebase_uid, email, username || null]
+      [firebase_uid, email, username]
     );
 
-    return res.json({ user: insert.rows[0] });
-
+    res.json({ user: insert.rows[0] });
   } catch (err) {
-    console.error("🔥 Register error:", err);
-    return res.status(500).json({ error: "Server hatası" });
+    console.error("Register error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
