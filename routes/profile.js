@@ -9,13 +9,13 @@ import {
 
 const router = express.Router();
 
-// GET profil (public)
+// 🔥 PROFİL GET - public
 router.get("/:uid", getProfile);
 
-// Profil oluştur (ilk giriş) – korumalı
+// 🔥 İlk girişte profil oluştur - auth required
 router.post("/", auth, createProfile);
 
-// Profil güncelle – korumalı
+// 🔥 Profil güncelle - auth required
 router.patch("/", auth, updateProfile);
 
 export default router;
