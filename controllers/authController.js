@@ -8,31 +8,29 @@ import { pool } from "../db.js";
  */
 export const registerUser = async (req, res) => {
   try {
-    const { username, phone } = req.body;
+    const { firebase_uid, email, username } = req.body;
 
-    const firebaseUid = req.user.uid; // Firebase UID
-    const email = req.user.email;     // Firebase Email
-
-    if (!username) {
-      return res.status(400).json({ error: "Username zorunlu" });
+    if (!firebase_uid || !email || !username) {
+      return res.status(400).json({ error: "Eksik alanlar var" });
     }
 
-    // DB kayıt (UPSERT)
     const result = await pool.query(
       `
-      INSERT INTO auth_users (id, email, username, phone)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (id) DO UPDATE 
-      SET username = $3,
-          phone = $4
-      RETURNING *;
+      INSERT INTO auth_users (firebase_uid, email, username)
+      VALUES ($1, $2, $3)
+      RETURNING *
       `,
-      [firebaseUid, email, username, phone || null]
+      [firebase_uid, email, username]
     );
 
     return res.json({ user: result.rows[0] });
   } catch (err) {
     console.error("🔥 Register error:", err);
+
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "Kullanıcı zaten mevcut" });
+    }
+
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -45,16 +43,23 @@ export const registerUser = async (req, res) => {
  */
 export const loginUser = async (req, res) => {
   try {
-    const firebaseUid = req.user.uid;
+    const { firebase_uid } = req.body;
+
+    if (!firebase_uid) {
+      return res.status(400).json({ error: "UID gerekir" });
+    }
 
     const result = await pool.query(
-      `SELECT * FROM auth_users WHERE id = $1 LIMIT 1`,
-      [firebaseUid]
+      `SELECT * FROM auth_users WHERE firebase_uid = $1 LIMIT 1`,
+      [firebase_uid]
     );
 
-    return res.json({
-      user: result.rows[0] || null,
-    });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ user: null });
+    }
+
+    return res.json({ user: result.rows[0] });
+
   } catch (err) {
     console.error("🔥 Login error:", err);
     res.status(500).json({ error: "Server error" });
