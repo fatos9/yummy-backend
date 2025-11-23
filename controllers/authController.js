@@ -1,67 +1,63 @@
 import { pool } from "../db.js";
 
 /**
- *  REGISTER USER
- *  POST /auth/register
- *  Firebase token → req.user içinde
- *  Body: username, phone
+ * REGISTER
+ * POST /auth/register
+ * Header → Authorization: Bearer <firebase token>
+ * Body → { username }
  */
 export const registerUser = async (req, res) => {
   try {
-    const { firebase_uid, email, username } = req.body;
+    const uid = req.user.uid;       // token'dan
+    const email = req.user.email;   // token'dan
+    const { username } = req.body;
 
-    if (!firebase_uid || !email || !username) {
-      return res.status(400).json({ error: "Eksik alanlar var" });
+    if (!username) {
+      return res.status(400).json({ error: "Username zorunlu" });
     }
 
+    // Kullanıcıyı DB'ye yaz (upsert)
     const result = await pool.query(
       `
       INSERT INTO auth_users (firebase_uid, email, username)
       VALUES ($1, $2, $3)
-      RETURNING *
+      ON CONFLICT (firebase_uid) DO UPDATE SET
+        email = EXCLUDED.email,
+        username = EXCLUDED.username
+      RETURNING *;
       `,
-      [firebase_uid, email, username]
+      [uid, email, username]
     );
 
-    return res.json({ user: result.rows[0] });
+    return res.json(result.rows[0]);
+
   } catch (err) {
     console.error("🔥 Register error:", err);
-
-    if (err.code === "23505") {
-      return res.status(409).json({ error: "Kullanıcı zaten mevcut" });
-    }
-
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server hatası" });
   }
 };
 
 
+
 /**
- *  LOGIN USER
- *  POST /auth/login
- *  Firebase token → req.user içinde
+ * LOGIN
+ * POST /auth/login
+ * Header → Authorization: Bearer <firebase token>
  */
 export const loginUser = async (req, res) => {
   try {
-    const { firebase_uid } = req.body;
-
-    if (!firebase_uid) {
-      return res.status(400).json({ error: "UID gerekir" });
-    }
+    const uid = req.user.uid;
 
     const result = await pool.query(
-      `SELECT * FROM auth_users WHERE firebase_uid = $1 LIMIT 1`,
-      [firebase_uid]
+      `SELECT * FROM auth_users WHERE firebase_uid = $1`,
+      [uid]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ user: null });
-    }
-
-    return res.json({ user: result.rows[0] });
+    // Kullanıcı yoksa -> frontend register sayfasına yönlendirebilir
+    return res.json(result.rows[0] || { exists: false });
 
   } catch (err) {
     console.error("🔥 Login error:", err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server hatası" });
   }
 };

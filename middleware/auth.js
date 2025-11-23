@@ -4,30 +4,22 @@ export const auth = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
 
-    // Token yoksa
     if (!header || !header.startsWith("Bearer ")) {
-      return res.status(401).json({
-        error: "Token bulunamadı"
-      });
+      return res.status(401).json({ error: "Token bulunamadı" });
     }
 
     const token = header.split(" ")[1];
 
-    // Firebase token doğrulama
     const decoded = await admin.auth().verifyIdToken(token);
 
-    // Kullanıcıyı request içine ekle
     req.user = {
-      uid: decoded.user_id || decoded.uid,
-      email: decoded.email,
-      ...decoded
+      uid: decoded.uid || decoded.user_id,
+      email: decoded.email
     };
 
-    next(); // devam et
+    next();
   } catch (err) {
     console.error("❌ Auth Middleware Hatası:", err);
-    return res.status(401).json({
-      error: "Geçersiz veya süresi dolmuş token"
-    });
+    return res.status(401).json({ error: "Geçersiz veya süresi dolmuş token" });
   }
 };

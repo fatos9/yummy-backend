@@ -1,7 +1,7 @@
 import { pool } from "../db.js";
 
 /**
- * GET /profile/:firebase_uid
+ * GET /profile/:uid
  */
 export const getProfile = async (req, res) => {
   try {
@@ -9,10 +9,12 @@ export const getProfile = async (req, res) => {
 
     // 1) Kullanıcıyı çek
     const userQuery = await pool.query(
-      `SELECT firebase_uid, email, username, photo_url, rating, points
-       FROM auth_users 
-       WHERE firebase_uid = $1
-       LIMIT 1`,
+      `
+      SELECT firebase_uid AS uid, email, username, photo_url, rating, points
+      FROM auth_users
+      WHERE firebase_uid = $1
+      LIMIT 1
+      `,
       [firebase_uid]
     );
 
@@ -24,34 +26,38 @@ export const getProfile = async (req, res) => {
 
     // 2) Meals
     const mealsQuery = await pool.query(
-      `SELECT * FROM meals 
-       WHERE user_id = $1 
-       ORDER BY createdat DESC`,
+      `
+      SELECT *
+      FROM meals
+      WHERE user_id = $1
+      ORDER BY createdat DESC
+      `,
       [firebase_uid]
     );
 
     // 3) Match Count
     const matchQuery = await pool.query(
-      `SELECT COUNT(*) AS count
-       FROM match_requests
-       WHERE (from_user_id = $1 OR to_user_id = $1)
-       AND status = 'accepted'`,
+      `
+      SELECT COUNT(*) AS count
+      FROM match_requests
+      WHERE (from_user_id = $1 OR to_user_id = $1)
+      AND status = 'accepted'
+      `,
       [firebase_uid]
     );
 
-    const matchCount = Number(matchQuery.rows[0].count);
+    const matchCount = Number(matchQuery.rows[0].count) || 0;
 
+    // 🔥 FRONTEND'İN BEKLEDİĞİ FORMAT:
     return res.json({
-      user: {
-        uid: user.firebase_uid,
-        email: user.email,
-        username: user.username,
-        photo_url: user.photo_url,
-        rating: user.rating,
-        points: user.points,
-      },
+      uid: user.uid,
+      email: user.email,
+      username: user.username,
+      photo_url: user.photo_url,
+      rating: user.rating,
+      points: user.points,
       meals: mealsQuery.rows,
-      matchCount,
+      matchCount: matchCount,
     });
 
   } catch (err) {
@@ -61,10 +67,9 @@ export const getProfile = async (req, res) => {
 };
 
 
+
 /**
  * POST /profile
- * Firebase UID → req.user.uid
- * İlk kayıt
  */
 export const createProfile = async (req, res) => {
   try {
@@ -81,11 +86,13 @@ export const createProfile = async (req, res) => {
       return res.json(existing.rows[0]);
     }
 
-    // Yeni profil oluştur
+    // Oluştur
     const insert = await pool.query(
-      `INSERT INTO auth_users (firebase_uid, email, username, photo_url, rating, points)
-       VALUES ($1, $2, NULL, NULL, 0, 0)
-       RETURNING *`,
+      `
+      INSERT INTO auth_users (firebase_uid, email, username, photo_url, rating, points)
+      VALUES ($1, $2, NULL, NULL, 0, 0)
+      RETURNING *
+      `,
       [firebase_uid, email]
     );
 
@@ -98,6 +105,7 @@ export const createProfile = async (req, res) => {
 };
 
 
+
 /**
  * PATCH /profile
  */
@@ -107,12 +115,13 @@ export const updateProfile = async (req, res) => {
     const { username, photo_url } = req.body;
 
     const update = await pool.query(
-      `UPDATE auth_users
-       SET 
-         username = COALESCE($1, username),
-         photo_url = COALESCE($2, photo_url)
-       WHERE firebase_uid = $3
-       RETURNING *`,
+      `
+      UPDATE auth_users
+      SET username = COALESCE($1, username),
+          photo_url = COALESCE($2, photo_url)
+      WHERE firebase_uid = $3
+      RETURNING *
+      `,
       [username, photo_url, firebase_uid]
     );
 
