@@ -26,7 +26,7 @@ export const getProfile = async (req, res) => {
     const mealsRes = await pool.query(
       `SELECT *
        FROM meals
-       WHERE user_id = $1
+       WHERE firebase_uid = $1
        ORDER BY createdat DESC`,
       [uid]
     );
