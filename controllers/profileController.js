@@ -15,8 +15,7 @@ export const getProfile = async (req, res) => {
         email,
         username,
         photo_url,
-        rating,
-        points
+        rating
       FROM auth_users
       WHERE firebase_uid = $1
       LIMIT 1
