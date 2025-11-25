@@ -5,46 +5,59 @@ import { pool } from "../db.js";
  */
 export const getProfile = async (req, res) => {
   try {
-    const uid = req.params.uid;
+    const uid = req.params.uid; // Firebase UID
 
-    // 1) Profil bilgisi
-    const userRes = await pool.query(
-      `SELECT firebase_uid AS uid, email, username, photo_url, rating, points 
-       FROM auth_users 
-       WHERE firebase_uid = $1 
-       LIMIT 1`,
+    // --- USER ---
+    const userQuery = await pool.query(
+      `
+      SELECT 
+        firebase_uid AS uid,
+        email,
+        username,
+        photo_url,
+        rating,
+        points
+      FROM auth_users
+      WHERE firebase_uid = $1
+      LIMIT 1
+      `,
       [uid]
     );
 
-    if (userRes.rows.length === 0) {
+    if (userQuery.rows.length === 0) {
       return res.status(404).json({ error: "bulunamadı" });
     }
 
-    const user = userRes.rows[0];
+    const user = userQuery.rows[0];
 
-    // 2) Kullanıcının kendi öğünleri
-    const mealsRes = await pool.query(
-      `SELECT *
-       FROM meals
-       WHERE firebase_uid = $1
-       ORDER BY createdat DESC`,
+    // --- MEALS ---
+    const mealsQuery = await pool.query(
+      `
+      SELECT *
+      FROM meals
+      WHERE user_id::text = $1::text
+      ORDER BY createdat DESC
+      `,
       [uid]
     );
 
-    const meals = mealsRes.rows;
+    // --- MATCH COUNT ---
+    let matchCount = 0;
+    try {
+      const matchQuery = await pool.query(
+        `
+        SELECT COUNT(*) AS count
+        FROM match_requests
+        WHERE (from_user_id = $1 OR to_user_id = $1)
+        AND status = 'accepted'
+        `,
+        [uid]
+      );
+      matchCount = Number(matchQuery.rows[0].count) || 0;
+    } catch (e) {
+      console.log("⚠ matchCount sorgusu hatası:", e.message);
+    }
 
-    // 3) match count
-    const matchRes = await pool.query(
-      `SELECT COUNT(*) AS count
-       FROM match_requests
-       WHERE (from_user_id = $1 OR to_user_id = $1)
-       AND status = 'accepted'`,
-      [uid]
-    );
-
-    const matchCount = Number(matchRes.rows[0].count) || 0;
-
-    // 🔥 Tüm datayı tek JSON içinde döndür
     return res.json({
       uid: user.uid,
       email: user.email,
@@ -53,15 +66,16 @@ export const getProfile = async (req, res) => {
       rating: user.rating,
       points: user.points,
 
-      meals,
+      meals: mealsQuery.rows,
       matchCount,
     });
 
   } catch (err) {
     console.error("🔥 getProfile error:", err);
-    return res.status(500).json({ error: "Server hatası" });
+    return res.status(500).json({ error: "Server hatası", detail: err.message });
   }
 };
+
 
 /**
  * POST /profile
