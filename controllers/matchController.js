@@ -13,13 +13,13 @@ export const sendMatchRequest = async (req, res) => {
       return res.status(400).json({ error: "Eksik bilgi" });
     }
 
-    // Zaten istek var mı kontrol et
+    // Aynı istek var mı?
     const check = await pool.query(
       `
-      SELECT * FROM match_requests
+      SELECT 1 FROM match_requests
       WHERE from_user_id = $1 AND to_user_id = $2 AND meal_id = $3
       LIMIT 1
-    `,
+      `,
       [fromUserId, to_user_id, meal_id]
     );
 
@@ -27,21 +27,38 @@ export const sendMatchRequest = async (req, res) => {
       return res.json({ message: "Zaten istek gönderilmiş" });
     }
 
+    // 🔥 Gönderen kullanıcının son paylaştığı öğünü bul
+    const senderMeal = await pool.query(
+      `
+      SELECT id
+      FROM meals
+      WHERE user_id = $1
+      ORDER BY createdat DESC
+      LIMIT 1
+      `,
+      [fromUserId]
+    );
+
+    const senderMealId = senderMeal.rows[0]?.id || null;
+
+    // 🔥 Yeni istek ekle
     const insert = await pool.query(
       `
-      INSERT INTO match_requests (from_user_id, to_user_id, meal_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO match_requests (from_user_id, to_user_id, meal_id, sender_meal_id)
+      VALUES ($1, $2, $3, $4)
       RETURNING *;
-    `,
-      [fromUserId, to_user_id, meal_id]
+      `,
+      [fromUserId, to_user_id, meal_id, senderMealId]
     );
 
     return res.json(insert.rows[0]);
+
   } catch (err) {
     console.error("🔥 Match istek gönderme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 /**
  * GET /match/received
