@@ -57,7 +57,7 @@ export const getReceivedMatches = async (req, res) => {
         u.username AS sender_name,
         u.photo_url AS sender_photo
       FROM match_requests mr
-      LEFT JOIN auth_users u ON u.id = mr.from_user_id
+      LEFT JOIN auth_users u ON u.firebase_uid = mr.from_user_id
       WHERE mr.to_user_id = $1
       ORDER BY mr.createdat DESC
     `,
@@ -77,7 +77,7 @@ export const getReceivedMatches = async (req, res) => {
  */
 export const getSentMatches = async (req, res) => {
   try {
-    const uid = req.user.uid;
+    const uid = req.user.uid; // Firebase UID
 
     const result = await pool.query(
       `
@@ -85,7 +85,7 @@ export const getSentMatches = async (req, res) => {
         u.username AS receiver_name,
         u.photo_url AS receiver_photo
       FROM match_requests mr
-      LEFT JOIN auth_users u ON u.id = mr.to_user_id
+      LEFT JOIN auth_users u ON u.firebase_uid = mr.to_user_id
       WHERE mr.from_user_id = $1
       ORDER BY mr.createdat DESC
     `,
