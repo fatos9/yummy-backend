@@ -53,14 +53,25 @@ export const getReceivedMatches = async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT mr.*, 
+      SELECT 
+        mr.*,
+
         u.username AS sender_name,
-        u.photo_url AS sender_photo
+        u.photo_url AS sender_photo,
+
+        m.id AS sender_meal_id,
+        m.name AS sender_meal_name,
+        m.image_url AS sender_meal_image
+
       FROM match_requests mr
-      LEFT JOIN auth_users u ON u.firebase_uid = mr.from_user_id
+      LEFT JOIN auth_users u
+        ON u.firebase_uid = mr.from_user_id
+      LEFT JOIN meals m
+        ON m.id = mr.meal_id
+
       WHERE mr.to_user_id = $1
       ORDER BY mr.createdat DESC
-    `,
+      `,
       [uid]
     );
 
@@ -70,6 +81,7 @@ export const getReceivedMatches = async (req, res) => {
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 /**
  * GET /match/sent
