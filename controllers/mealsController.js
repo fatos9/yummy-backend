@@ -1,3 +1,4 @@
+// controllers/mealController.js
 import { pool } from "../db.js";
 
 /**
@@ -22,32 +23,41 @@ export const addMeal = async (req, res) => {
 
     const userId = req.user.uid;
 
-    // 🔥 KULLANICI BİLGİSİ (premium + last_meal_at)
+    // 🔥 Kullanıcı premium mu?
     const userInfo = await pool.query(
       `
-      SELECT last_meal_at, is_premium
+      SELECT is_premium
       FROM auth_users
       WHERE firebase_uid = $1
       `,
       [userId]
     );
 
-    const u = userInfo.rows[0];
+    const isPremium = userInfo.rows[0]?.is_premium;
 
-    // Premium değilse günlük limit kontrolü
-    if (!u.is_premium) {
-      const now = new Date();
-      const last = u.last_meal_at ? new Date(u.last_meal_at) : null;
+    // 🔴 PREMIUM DEĞİLSE GÜNLÜK 1 LİMİT KONTROLÜ
+    if (!isPremium) {
+      const todaysMeal = await pool.query(
+        `
+        SELECT id 
+        FROM meals
+        WHERE user_id = $1
+        AND DATE(createdat) = CURRENT_DATE
+        LIMIT 1
+        `,
+        [userId]
+      );
 
-      if (last && now - last < 24 * 60 * 60 * 1000) {
+      if (todaysMeal.rows.length > 0) {
         return res.status(400).json({
-          error: "Günde yalnızca 1 öğün ekleyebilirsin. 24 saat sonra tekrar dene."
+          error: "Bugün zaten bir öğün paylaştın. Yarın tekrar deneyebilirsin."
         });
       }
     }
 
     // 🔥 ÖĞÜN EKLEME
-    const query = `
+    const insertMeal = await pool.query(
+      `
       INSERT INTO meals (
         name,
         image_url,
@@ -57,36 +67,23 @@ export const addMeal = async (req, res) => {
         allergens,
         user_location,
         restaurant_location
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8
       )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       RETURNING *;
-    `;
-
-    const values = [
-      name,
-      image_url,
-      category,
-      userId,
-      restaurant_name,
-      allergens || null,
-      user_location || null,
-      restaurant_location || null
-    ];
-
-    const result = await pool.query(query, values);
-
-    // 🔥 last_meal_at güncelle
-    await pool.query(
-      `
-      UPDATE auth_users
-      SET last_meal_at = NOW()
-      WHERE firebase_uid = $1
       `,
-      [userId]
+      [
+        name,
+        image_url,
+        category,
+        userId,
+        restaurant_name || null,
+        allergens || null,
+        user_location || null,
+        restaurant_location || null
+      ]
     );
 
-    return res.json(result.rows[0]);
+    return res.json(insertMeal.rows[0]);
 
   } catch (err) {
     console.error("🔥 Meal ekleme hatası:", err);
@@ -95,21 +92,27 @@ export const addMeal = async (req, res) => {
 };
 
 
+
 /**
  * GET /meals
  * Tüm öğünleri listeler
  */
 export const getMeals = async (req, res) => {
   try {
-    const query = `SELECT * FROM meals ORDER BY createdat DESC`;
-    const result = await pool.query(query);
+    const result = await pool.query(`
+      SELECT * FROM meals
+      ORDER BY createdat DESC
+    `);
 
     return res.json(result.rows);
+
   } catch (err) {
     console.error("🔥 Meal listeleme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
+
 
 /**
  * GET /meals/:id
@@ -129,11 +132,14 @@ export const getMealById = async (req, res) => {
     }
 
     return res.json(result.rows[0]);
+
   } catch (err) {
     console.error("🔥 Meal detay hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
+
 
 /**
  * DELETE /meals/:id
@@ -146,19 +152,23 @@ export const deleteMeal = async (req, res) => {
 
     // Meal sahibini kontrol et
     const check = await pool.query(
-      `SELECT * FROM meals WHERE id = $1 LIMIT 1`,
+      `SELECT user_id FROM meals WHERE id = $1 LIMIT 1`,
       [mealId]
     );
 
-    if (check.rows.length === 0)
+    if (check.rows.length === 0) {
       return res.status(404).json({ error: "Öğün bulunamadı" });
+    }
 
-    if (check.rows[0].user_id !== userId)
+    if (check.rows[0].user_id !== userId) {
       return res.status(403).json({ error: "Bu öğünü silemezsin" });
+    }
 
+    // Meal sil
     await pool.query(`DELETE FROM meals WHERE id = $1`, [mealId]);
 
     return res.json({ success: true });
+
   } catch (err) {
     console.error("🔥 Meal silme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
