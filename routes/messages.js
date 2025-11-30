@@ -10,6 +10,6 @@ const router = express.Router();
 
 router.get("/room/:room_id", auth, getChatMessages);
 router.post("/send", auth, sendMessage);
-router.get("/chat/rooms", auth, getUserChatRooms);
+router.get("/rooms", auth, getUserChatRooms);
 
 export default router;

@@ -89,6 +89,7 @@ export const sendMessage = async (req, res) => {
 // GET /chat/rooms
 // ---------------------------------------------------
 export const getUserChatRooms = async (req, res) => {
+  
   try {
     const uid = req.user.uid;
 
