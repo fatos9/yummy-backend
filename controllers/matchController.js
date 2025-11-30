@@ -1,3 +1,4 @@
+// controllers/matchController.js
 import { pool } from "../db.js";
 
 /**
@@ -13,7 +14,7 @@ export const sendMatchRequest = async (req, res) => {
       return res.status(400).json({ error: "Eksik bilgi" });
     }
 
-    // Aynı istek var mı?
+    // Aynı istek kontrolü
     const check = await pool.query(
       `
       SELECT 1 FROM match_requests
@@ -27,7 +28,7 @@ export const sendMatchRequest = async (req, res) => {
       return res.json({ message: "Zaten istek gönderilmiş" });
     }
 
-    // 🔥 Gönderen kullanıcının son paylaştığı öğünü bul
+    // Göndericinin kendi son öğünü (sender_meal_id)
     const senderMeal = await pool.query(
       `
       SELECT id
@@ -41,7 +42,7 @@ export const sendMatchRequest = async (req, res) => {
 
     const senderMealId = senderMeal.rows[0]?.id || null;
 
-    // 🔥 Yeni istek ekle
+    // Yeni istek ekle
     const insert = await pool.query(
       `
       INSERT INTO match_requests (from_user_id, to_user_id, meal_id, sender_meal_id)
@@ -62,7 +63,6 @@ export const sendMatchRequest = async (req, res) => {
 
 /**
  * GET /match/received
- * Kullanıcının aldığı istekler
  */
 export const getReceivedMatches = async (req, res) => {
   try {
@@ -72,20 +72,14 @@ export const getReceivedMatches = async (req, res) => {
       `
       SELECT 
         mr.*,
-
         u.username AS sender_name,
         u.photo_url AS sender_photo,
-
         m.id AS sender_meal_id,
         m.name AS sender_meal_name,
         m.image_url AS sender_meal_image
-
       FROM match_requests mr
-      LEFT JOIN auth_users u
-        ON u.firebase_uid = mr.from_user_id
-      LEFT JOIN meals m
-        ON m.id = mr.sender_meal_id   -- 🔥 DÜZELTİLMİŞ SATIR
-
+      LEFT JOIN auth_users u ON u.firebase_uid = mr.from_user_id
+      LEFT JOIN meals m ON m.id = mr.sender_meal_id
       WHERE mr.to_user_id = $1
       ORDER BY mr.createdat DESC
       `,
@@ -93,6 +87,7 @@ export const getReceivedMatches = async (req, res) => {
     );
 
     return res.json(result.rows);
+
   } catch (err) {
     console.error("🔥 Gelen istekler hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
@@ -102,36 +97,36 @@ export const getReceivedMatches = async (req, res) => {
 
 /**
  * GET /match/sent
- * Kullanıcının gönderdiği istekler
  */
 export const getSentMatches = async (req, res) => {
   try {
-    const uid = req.user.uid; // Firebase UID
+    const uid = req.user.uid;
 
     const result = await pool.query(
       `
-      SELECT mr.*,
+      SELECT mr.*, 
         u.username AS receiver_name,
         u.photo_url AS receiver_photo
       FROM match_requests mr
       LEFT JOIN auth_users u ON u.firebase_uid = mr.to_user_id
       WHERE mr.from_user_id = $1
       ORDER BY mr.createdat DESC
-    `,
+      `,
       [uid]
     );
 
     return res.json(result.rows);
+
   } catch (err) {
     console.error("🔥 Gönderilen istekler hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
 
+
 /**
  * POST /match/accept
- * İstek kabul edilir → match tablosuna kayıt düşülür
- * Günlük 1 kabul limiti + diğer pendingleri otomatik reddetme
+ * Match oluşur → chatroom oluşur
  */
 export const acceptMatch = async (req, res) => {
   try {
@@ -142,7 +137,7 @@ export const acceptMatch = async (req, res) => {
       return res.status(400).json({ error: "request_id eksik" });
     }
 
-    // 🔥 Kullanıcı bilgisi (premium + last_accept_at)
+    // Kullanıcı bilgisi
     const userInfo = await pool.query(
       `
       SELECT last_accept_at, is_premium
@@ -154,7 +149,7 @@ export const acceptMatch = async (req, res) => {
 
     const u = userInfo.rows[0];
 
-    // Normal kullanıcı için günlük 1 kabul limiti
+    // Premium değilse günlük 1 limit
     if (!u.is_premium) {
       const now = new Date();
       const last = u.last_accept_at ? new Date(u.last_accept_at) : null;
@@ -166,7 +161,7 @@ export const acceptMatch = async (req, res) => {
       }
     }
 
-    // 🔥 İsteği çek
+    // İstek doğrulama
     const check = await pool.query(
       `
       SELECT * FROM match_requests
@@ -181,29 +176,25 @@ export const acceptMatch = async (req, res) => {
 
     const request = check.rows[0];
 
-    // 🔥 Status güncelle (accepted)
-    await pool.query(
-      `
+    // Kabul et
+    await pool.query(`
       UPDATE match_requests
-      SET status = 'accepted'
-      WHERE id = $1
+      SET status='accepted'
+      WHERE id=$1
       `,
       [request_id]
     );
 
-    // 🔥 Diğer pending istekleri otomatik reddet
-    await pool.query(
-      `
+    // Diğerleri reddet
+    await pool.query(`
       UPDATE match_requests
-      SET status = 'rejected'
-      WHERE to_user_id = $1
-      AND status = 'pending'
-      AND id != $2
+      SET status='rejected'
+      WHERE to_user_id=$1 AND id != $2 AND status='pending'
       `,
       [uid, request_id]
     );
 
-    // 🔥 Match oluştur
+    // MATCH OLUŞTUR
     const matchInsert = await pool.query(
       `
       INSERT INTO matches (meal_id, user1_id, user2_id)
@@ -213,20 +204,34 @@ export const acceptMatch = async (req, res) => {
       [request.meal_id, request.from_user_id, request.to_user_id]
     );
 
-    // 🔥 Kullanıcının son kabul zamanını güncelle
-    await pool.query(
+    const match = matchInsert.rows[0];
+
+    // CHAT ROOM OLUŞTUR
+    const chatRoom = await pool.query(
       `
+      INSERT INTO chat_rooms (match_id, user1_id, user2_id)
+      VALUES ($1, $2, $3)
+      RETURNING *;
+      `,
+      [match.id, match.user1_id, match.user2_id]
+    );
+
+    // Kullanıcı son kabul zamanını güncelle
+    await pool.query(`
       UPDATE auth_users
       SET last_accept_at = NOW()
-      WHERE firebase_uid = $1
+      WHERE firebase_uid=$1
       `,
       [uid]
     );
 
-    return res.json(matchInsert.rows[0]);
+    return res.json({
+      match,
+      room: chatRoom.rows[0]
+    });
 
   } catch (err) {
-    console.error("🔥 Match kabul etme hatası:", err);
+    console.error("🔥 Match kabul hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
@@ -234,37 +239,38 @@ export const acceptMatch = async (req, res) => {
 
 /**
  * POST /match/reject
- * İstek reddedilir
  */
 export const rejectMatch = async (req, res) => {
   try {
     const uid = req.user.uid;
     const { request_id } = req.body;
 
+    if (!request_id) {
+      return res.status(400).json({ error: "request_id eksik" });
+    }
+
     const check = await pool.query(
       `
-      SELECT * FROM match_requests
-      WHERE id = $1 AND to_user_id = $2
-    `,
+      SELECT id FROM match_requests
+      WHERE id=$1 AND to_user_id=$2 AND status='pending'
+      `,
       [request_id, uid]
     );
 
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: "İstek bulunamadı" });
+    if (!check.rows.length) {
+      return res.status(404).json({ error: "İstek bulunamadı / işlem yapılmış" });
     }
 
-    await pool.query(
-      `
+    await pool.query(`
       UPDATE match_requests
-      SET status = 'rejected'
-      WHERE id = $1
-    `,
-      [request_id]
-    );
+      SET status='rejected'
+      WHERE id=$1
+    `, [request_id]);
 
     return res.json({ success: true });
+
   } catch (err) {
-    console.error("🔥 Match reddetme hatası:", err);
+    console.error("🔥 Reject error:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };

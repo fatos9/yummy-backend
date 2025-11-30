@@ -8,7 +8,7 @@ import {
 const router = express.Router();
 
 // Match mesajlarını getir
-router.get("/:match_id", auth, getChatMessages);
+router.get("/room/:room_id", auth, getChatMessages);
 
 // Yeni mesaj gönder
 router.post("/send", auth, sendMessage);

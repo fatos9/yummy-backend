@@ -1,57 +1,59 @@
+// controllers/messagesController.js
 import { pool } from "../db.js";
 
 /**
- * GET /chat/:match_id
- * Bir match'in mesaj geçmişini döner
+ * GET /chat/room/:room_id
  */
 export const getChatMessages = async (req, res) => {
   try {
-    const matchId = req.params.match_id;
+    const roomId = req.params.room_id;
 
-    const result = await pool.query(
-      `
-      SELECT m.*, u.username AS sender_name, u.photo_url AS sender_photo
+    const result = await pool.query(`
+      SELECT m.*, u.username, u.photo_url
       FROM messages m
-      LEFT JOIN auth_users u ON u.id = m.sender_id
-      WHERE m.match_id = $1
-      ORDER BY m.createdat ASC;
-      `,
-      [matchId]
-    );
+      LEFT JOIN auth_users u ON u.uid = m.sender_id
+      WHERE m.room_id=$1
+      ORDER BY m.created_at ASC
+    `, [roomId]);
 
-    return res.json(result.rows);
+    res.json(result.rows);
+
   } catch (err) {
-    console.error("🔥 Mesaj geçmişi hatası:", err);
-    return res.status(500).json({ error: "Server hatası" });
+    res.status(500).json({ error: err.message });
   }
 };
 
 
 /**
  * POST /chat/send
- * Sohbete mesaj gönderme
  */
 export const sendMessage = async (req, res) => {
   try {
+    const { room_id, message } = req.body;
     const senderId = req.user.uid;
-    const { match_id, message } = req.body;
 
-    if (!match_id || !message) {
-      return res.status(400).json({ error: "Eksik alanlar var" });
+    // Oda kilitli mi?
+    const room = await pool.query(`
+      SELECT is_locked FROM chat_rooms WHERE id=$1
+    `, [room_id]);
+
+    if (!room.rows.length) {
+      return res.status(404).json({ error: "Chat odası yok." });
     }
 
-    const result = await pool.query(
-      `
-      INSERT INTO messages (match_id, sender_id, message)
-      VALUES ($1, $2, $3)
-      RETURNING *;
-      `,
-      [match_id, senderId, message]
-    );
+    if (room.rows[0].is_locked) {
+      return res.status(403).json({ error: "Sohbet kapanmış." });
+    }
 
-    return res.json(result.rows[0]);
+    const result = await pool.query(`
+      INSERT INTO messages (room_id, sender_id, message)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `, [room_id, senderId, message]);
+
+    res.json(result.rows[0]);
+
   } catch (err) {
-    console.error("🔥 Mesaj gönderme hatası:", err);
-    return res.status(500).json({ error: "Server hatası" });
+    res.status(500).json({ error: err.message });
   }
 };
