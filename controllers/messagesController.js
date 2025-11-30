@@ -8,32 +8,21 @@ import { pool } from "../db.js";
 export const getChatMessages = async (req, res) => {
   try {
     const roomId = req.params.room_id;
-    console.log("🔥 DEBUG → roomId:", roomId);
 
-    // 1) Chat oda bilgisi
-    const roomQuery = await pool.query(
-      `
+    const roomQuery = await pool.query(`
       SELECT id, user1_id, user2_id, is_locked
       FROM chat_rooms
       WHERE id = $1
       LIMIT 1
-      `,
-      [roomId]
-    );
-
-    console.log("🔥 DEBUG → roomQuery.rows:", roomQuery.rows);
+    `, [roomId]);
 
     if (roomQuery.rows.length === 0) {
-      console.log("❌ DEBUG → Chat odası bulunamadı.");
       return res.status(404).json({ error: "Chat odası bulunamadı." });
     }
 
     const room = roomQuery.rows[0];
-    console.log("🔥 DEBUG → ROOM:", room);
 
-    // 2) Mesajlar
-    const messagesQuery = await pool.query(
-      `
+    const messagesQuery = await pool.query(`
       SELECT 
         m.id,
         m.room_id,
@@ -46,24 +35,27 @@ export const getChatMessages = async (req, res) => {
       LEFT JOIN auth_users u ON u.firebase_uid = m.sender_id
       WHERE m.room_id = $1
       ORDER BY m.created_at ASC
-      `,
-      [roomId]
-    );
+    `, [roomId]);
 
-    console.log("🔥 DEBUG → messages count:", messagesQuery.rows.length);
-
-    const isLocked = room.is_locked;
+    if (room.is_locked) {
+      return res.json({
+        room,
+        messages: [],
+        error: "Bu sohbet kapanmış."
+      });
+    }
 
     return res.json({
       room,
-      messages: isLocked ? [] : messagesQuery.rows,
-      locked: isLocked,
+      messages: messagesQuery.rows
     });
+
   } catch (err) {
-    console.error("🔥 FINAL ERROR getChatMessages:", err);
-    return res.status(500).json({ error: "Sunucu hatası", detail: err.message });
+    console.error("🔥 getChatMessages Error:", err);
+    res.status(500).json({ error: "Sunucu hatası" });
   }
 };
+
 
 /**
  * POST /chat/send
