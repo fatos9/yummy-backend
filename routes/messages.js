@@ -2,18 +2,19 @@ import express from "express";
 import { auth } from "../middleware/auth.js";
 import {
   getChatMessages,
-  sendMessage
+  sendMessage,
+  getUserChatRooms
 } from "../controllers/messagesController.js";
 
 const router = express.Router();
 
-// Match mesajlarını getir
+// Tek bir chat odasının mesajları
 router.get("/room/:room_id", auth, getChatMessages);
 
-// Yeni mesaj gönder
+// Mesaj gönder
 router.post("/send", auth, sendMessage);
 
-//Tüm chat roomları getir
-router.get("/chat/rooms", auth, getUserChatRooms);
+// Kullanıcının tüm chat odaları
+router.get("/rooms", auth, getUserChatRooms);
 
 export default router;
