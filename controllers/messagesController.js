@@ -3,25 +3,69 @@ import { pool } from "../db.js";
 
 /**
  * GET /chat/room/:room_id
+ * Chat odası bilgisi + mesaj listesi döner
  */
 export const getChatMessages = async (req, res) => {
   try {
     const roomId = req.params.room_id;
 
-    const result = await pool.query(`
-      SELECT m.*, u.username, u.photo_url
-      FROM messages m
-      LEFT JOIN auth_users u ON u.uid = m.sender_id
-      WHERE m.room_id=$1
-      ORDER BY m.created_at ASC
-    `, [roomId]);
+    // 1) Chat odasını al
+    const roomQuery = await pool.query(
+      `
+      SELECT id, user1_id, user2_id, is_locked
+      FROM chat_rooms
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [roomId]
+    );
 
-    res.json(result.rows);
+    if (roomQuery.rows.length === 0) {
+      return res.status(404).json({ error: "Chat odası bulunamadı." });
+    }
+
+    const room = roomQuery.rows[0];
+
+    // 2) Mesajları al
+    const messagesQuery = await pool.query(
+      `
+      SELECT 
+        m.id,
+        m.room_id,
+        m.sender_id,
+        m.message,
+        m.created_at,
+        u.username,
+        u.photo_url
+      FROM messages m
+      LEFT JOIN auth_users u ON u.firebase_uid = m.sender_id
+      WHERE m.room_id = $1
+      ORDER BY m.created_at ASC
+      `,
+      [roomId]
+    );
+
+    // Oda kilitli ise özel döndür
+    if (room.is_locked) {
+      return res.json({
+        room,
+        messages: [],
+        error: "Bu sohbet kapanmış."
+      });
+    }
+
+    // Normal döndür
+    return res.json({
+      room,
+      messages: messagesQuery.rows
+    });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("🔥 getChatMessages Error:", err);
+    res.status(500).json({ error: "Sunucu hatası" });
   }
 };
+
 
 
 /**
@@ -32,28 +76,34 @@ export const sendMessage = async (req, res) => {
     const { room_id, message } = req.body;
     const senderId = req.user.uid;
 
-    // Oda kilitli mi?
-    const room = await pool.query(`
-      SELECT is_locked FROM chat_rooms WHERE id=$1
-    `, [room_id]);
+    // 1) Oda bilgisi
+    const room = await pool.query(
+      `SELECT is_locked FROM chat_rooms WHERE id=$1`,
+      [room_id]
+    );
 
     if (!room.rows.length) {
       return res.status(404).json({ error: "Chat odası yok." });
     }
 
     if (room.rows[0].is_locked) {
-      return res.status(403).json({ error: "Sohbet kapanmış." });
+      return res.status(403).json({ error: "Bu sohbet kapanmış. Mesaj gönderemezsin." });
     }
 
-    const result = await pool.query(`
+    // 2) Mesaj ekle
+    const result = await pool.query(
+      `
       INSERT INTO messages (room_id, sender_id, message)
       VALUES ($1, $2, $3)
       RETURNING *
-    `, [room_id, senderId, message]);
+      `,
+      [room_id, senderId, message]
+    );
 
-    res.json(result.rows[0]);
+    return res.json(result.rows[0]);
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("🔥 sendMessage Error:", err);
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
