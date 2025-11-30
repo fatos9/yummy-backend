@@ -5,10 +5,11 @@ import { pool } from "../db.js";
 // ---------------------------------------------------
 export const getChatMessages = async (req, res) => {
   try {
-    const roomId = Number(req.params.room_id);
+    const roomId = parseInt(req.params.room_id, 10);
 
-    if (!roomId)
+    if (isNaN(roomId)) {
       return res.status(400).json({ error: "room_id geçersiz" });
+    }
 
     const roomQuery = await pool.query(
       `SELECT id, user1_id, user2_id, is_locked
@@ -33,7 +34,7 @@ export const getChatMessages = async (req, res) => {
          u.username,
          u.photo_url
        FROM messages m
-       LEFT JOIN auth_users u ON u.firebase_uid = m.sender_id
+       LEFT JOIN auth_users u ON u.uid = m.sender_id
        WHERE m.room_id = $1
        ORDER BY m.created_at ASC`,
       [roomId]
@@ -44,6 +45,7 @@ export const getChatMessages = async (req, res) => {
       messages: msgQ.rows,
       locked: room.is_locked,
     });
+
   } catch (err) {
     console.error("🔥 getChatMessages Error:", err);
     return res.status(500).json({ error: "Sunucu hatası" });
@@ -99,7 +101,7 @@ export const getUserChatRooms = async (req, res) => {
          m.created_at AS last_message_time
        FROM chat_rooms cr
        LEFT JOIN auth_users u
-         ON u.firebase_uid = 
+         ON u.uid = 
            CASE WHEN cr.user1_id = $1 THEN cr.user2_id ELSE cr.user1_id END
        LEFT JOIN LATERAL (
          SELECT message, created_at
@@ -114,6 +116,7 @@ export const getUserChatRooms = async (req, res) => {
     );
 
     return res.json(q.rows);
+
   } catch (err) {
     console.error("🔥 Rooms list error:", err);
     return res.status(500).json({ error: "Sunucu hatası" });
