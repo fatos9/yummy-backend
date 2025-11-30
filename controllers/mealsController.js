@@ -2,7 +2,7 @@ import { pool } from "../db.js";
 
 /**
  * POST /meals
- * Yeni öğün ekler
+ * Yeni öğün ekler — günlük 1 öğün limiti (premium hariç)
  */
 export const addMeal = async (req, res) => {
   try {
@@ -22,6 +22,31 @@ export const addMeal = async (req, res) => {
 
     const userId = req.user.uid;
 
+    // 🔥 KULLANICI BİLGİSİ (premium + last_meal_at)
+    const userInfo = await pool.query(
+      `
+      SELECT last_meal_at, is_premium
+      FROM auth_users
+      WHERE firebase_uid = $1
+      `,
+      [userId]
+    );
+
+    const u = userInfo.rows[0];
+
+    // Premium değilse günlük limit kontrolü
+    if (!u.is_premium) {
+      const now = new Date();
+      const last = u.last_meal_at ? new Date(u.last_meal_at) : null;
+
+      if (last && now - last < 24 * 60 * 60 * 1000) {
+        return res.status(400).json({
+          error: "Günde yalnızca 1 öğün ekleyebilirsin. 24 saat sonra tekrar dene."
+        });
+      }
+    }
+
+    // 🔥 ÖĞÜN EKLEME
     const query = `
       INSERT INTO meals (
         name,
@@ -51,12 +76,24 @@ export const addMeal = async (req, res) => {
 
     const result = await pool.query(query, values);
 
+    // 🔥 last_meal_at güncelle
+    await pool.query(
+      `
+      UPDATE auth_users
+      SET last_meal_at = NOW()
+      WHERE firebase_uid = $1
+      `,
+      [userId]
+    );
+
     return res.json(result.rows[0]);
+
   } catch (err) {
     console.error("🔥 Meal ekleme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 /**
  * GET /meals

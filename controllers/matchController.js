@@ -131,6 +131,7 @@ export const getSentMatches = async (req, res) => {
 /**
  * POST /match/accept
  * İstek kabul edilir → match tablosuna kayıt düşülür
+ * Günlük 1 kabul limiti + diğer pendingleri otomatik reddetme
  */
 export const acceptMatch = async (req, res) => {
   try {
@@ -141,12 +142,36 @@ export const acceptMatch = async (req, res) => {
       return res.status(400).json({ error: "request_id eksik" });
     }
 
-    // İsteği çek
+    // 🔥 Kullanıcı bilgisi (premium + last_accept_at)
+    const userInfo = await pool.query(
+      `
+      SELECT last_accept_at, is_premium
+      FROM auth_users
+      WHERE firebase_uid = $1
+      `,
+      [uid]
+    );
+
+    const u = userInfo.rows[0];
+
+    // Normal kullanıcı için günlük 1 kabul limiti
+    if (!u.is_premium) {
+      const now = new Date();
+      const last = u.last_accept_at ? new Date(u.last_accept_at) : null;
+
+      if (last && now - last < 24 * 60 * 60 * 1000) {
+        return res.status(400).json({
+          error: "Günde yalnızca 1 eşleşme kabul edebilirsin."
+        });
+      }
+    }
+
+    // 🔥 İsteği çek
     const check = await pool.query(
       `
       SELECT * FROM match_requests
       WHERE id = $1 AND to_user_id = $2
-    `,
+      `,
       [request_id, uid]
     );
 
@@ -156,28 +181,56 @@ export const acceptMatch = async (req, res) => {
 
     const request = check.rows[0];
 
-    // Status güncelle
+    // 🔥 Status güncelle (accepted)
     await pool.query(
-      `UPDATE match_requests SET status = 'accepted' WHERE id = $1`,
+      `
+      UPDATE match_requests
+      SET status = 'accepted'
+      WHERE id = $1
+      `,
       [request_id]
     );
 
-    // Match oluştur
+    // 🔥 Diğer pending istekleri otomatik reddet
+    await pool.query(
+      `
+      UPDATE match_requests
+      SET status = 'rejected'
+      WHERE to_user_id = $1
+      AND status = 'pending'
+      AND id != $2
+      `,
+      [uid, request_id]
+    );
+
+    // 🔥 Match oluştur
     const matchInsert = await pool.query(
       `
       INSERT INTO matches (meal_id, user1_id, user2_id)
       VALUES ($1, $2, $3)
       RETURNING *;
-    `,
+      `,
       [request.meal_id, request.from_user_id, request.to_user_id]
     );
 
+    // 🔥 Kullanıcının son kabul zamanını güncelle
+    await pool.query(
+      `
+      UPDATE auth_users
+      SET last_accept_at = NOW()
+      WHERE firebase_uid = $1
+      `,
+      [uid]
+    );
+
     return res.json(matchInsert.rows[0]);
+
   } catch (err) {
     console.error("🔥 Match kabul etme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 /**
  * POST /match/reject
