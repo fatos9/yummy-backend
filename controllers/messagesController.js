@@ -1,22 +1,19 @@
-// controllers/messagesController.js
 import { pool } from "../db.js";
 
-/**
- * GET /chat/room/:room_id
- */
+// ---------------------------------------------------
+// GET /chat/room/:room_id
+// ---------------------------------------------------
 export const getChatMessages = async (req, res) => {
   try {
     const roomId = Number(req.params.room_id);
 
-    if (!roomId) {
+    if (!roomId)
       return res.status(400).json({ error: "room_id geçersiz" });
-    }
 
     const roomQuery = await pool.query(
       `SELECT id, user1_id, user2_id, is_locked
        FROM chat_rooms
-       WHERE id = $1
-       LIMIT 1`,
+       WHERE id = $1`,
       [roomId]
     );
 
@@ -26,7 +23,7 @@ export const getChatMessages = async (req, res) => {
 
     const room = roomQuery.rows[0];
 
-    const messagesQuery = await pool.query(
+    const msgQ = await pool.query(
       `SELECT 
          m.id,
          m.room_id,
@@ -42,60 +39,58 @@ export const getChatMessages = async (req, res) => {
       [roomId]
     );
 
-    res.json({
+    return res.json({
       room,
-      messages: messagesQuery.rows,
+      messages: msgQ.rows,
       locked: room.is_locked,
     });
   } catch (err) {
     console.error("🔥 getChatMessages Error:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 
-/**
- * POST /chat/send
- */
+// ---------------------------------------------------
+// POST /chat/send
+// ---------------------------------------------------
 export const sendMessage = async (req, res) => {
   try {
     const { room_id, message } = req.body;
     const senderId = req.user.uid;
 
-    const roomCheck = await pool.query(
-      `SELECT id, is_locked FROM chat_rooms WHERE id = $1`,
+    const check = await pool.query(
+      `SELECT id, is_locked FROM chat_rooms WHERE id=$1`,
       [room_id]
     );
 
-    if (!roomCheck.rows.length) {
+    if (!check.rows.length)
       return res.status(404).json({ error: "Chat odası yok" });
-    }
 
-    if (roomCheck.rows[0].is_locked) {
+    if (check.rows[0].is_locked)
       return res.status(403).json({ error: "Sohbet kapanmış" });
-    }
 
-    const result = await pool.query(
+    const insert = await pool.query(
       `INSERT INTO messages (room_id, sender_id, message)
        VALUES ($1, $2, $3)
        RETURNING *`,
       [room_id, senderId, message]
     );
 
-    res.json(result.rows[0]);
+    return res.json(insert.rows[0]);
   } catch (err) {
     console.error("🔥 sendMessage Error:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 
-/**
- * GET /chat/rooms
- */
+// ---------------------------------------------------
+// GET /chat/rooms
+// ---------------------------------------------------
 export const getUserChatRooms = async (req, res) => {
   try {
     const uid = req.user.uid;
 
-    const result = await pool.query(
+    const q = await pool.query(
       `SELECT 
          cr.*,
          u.username AS other_username,
@@ -118,9 +113,9 @@ export const getUserChatRooms = async (req, res) => {
       [uid]
     );
 
-    res.json(result.rows);
+    return res.json(q.rows);
   } catch (err) {
     console.error("🔥 Rooms list error:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
