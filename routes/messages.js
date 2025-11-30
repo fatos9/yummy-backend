@@ -13,4 +13,7 @@ router.get("/room/:room_id", auth, getChatMessages);
 // Yeni mesaj gönder
 router.post("/send", auth, sendMessage);
 
+//Tüm chat roomları getir
+router.get("/chat/rooms", auth, getUserChatRooms);
+
 export default router;
