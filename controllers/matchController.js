@@ -177,20 +177,22 @@ export const acceptMatch = async (req, res) => {
     const request = check.rows[0];
 
     // Kabul et
-    await pool.query(`
+    await pool.query(
+      `
       UPDATE match_requests
       SET status='accepted'
       WHERE id=$1
-      `,
+    `,
       [request_id]
     );
 
-    // Diğerleri reddet
-    await pool.query(`
+    // Diğer pendingleri reddet
+    await pool.query(
+      `
       UPDATE match_requests
       SET status='rejected'
       WHERE to_user_id=$1 AND id != $2 AND status='pending'
-      `,
+    `,
       [uid, request_id]
     );
 
@@ -200,41 +202,63 @@ export const acceptMatch = async (req, res) => {
       INSERT INTO matches (meal_id, user1_id, user2_id)
       VALUES ($1, $2, $3)
       RETURNING *;
-      `,
+    `,
       [request.meal_id, request.from_user_id, request.to_user_id]
     );
 
     const match = matchInsert.rows[0];
 
-    // CHAT ROOM OLUŞTUR
-    const chatRoom = await pool.query(
-      `
-      INSERT INTO chat_rooms (match_id, user1_id, user2_id)
-      VALUES ($1, $2, $3)
-      RETURNING *;
-      `,
-      [match.id, match.user1_id, match.user2_id]
+    // ----------------------------------------------
+    // 🔥 BURAYA LOG EKLEDİK — ASIL SORUNUN YERİ
+    // ----------------------------------------------
+
+    console.log("📌 MATCH INSERT RESULT:", match);
+    console.log(
+      "📌 ChatRoom Insert Values:",
+      match.id,
+      match.user1_id,
+      match.user2_id
     );
 
+    let chatRoom;
+    try {
+      chatRoom = await pool.query(
+        `
+        INSERT INTO chat_rooms (match_id, user1_id, user2_id)
+        VALUES ($1, $2, $3)
+        RETURNING *;
+      `,
+        [match.id, match.user1_id, match.user2_id]
+      );
+    } catch (err) {
+      console.error("🔥 CHAT ROOM INSERT ERROR:", err);
+
+      return res.status(500).json({
+        error: "chat room insert error",
+        details: err.message,
+      });
+    }
+
     // Kullanıcı son kabul zamanını güncelle
-    await pool.query(`
+    await pool.query(
+      `
       UPDATE auth_users
       SET last_accept_at = NOW()
       WHERE firebase_uid=$1
-      `,
+    `,
       [uid]
     );
 
     return res.json({
       match,
-      room: chatRoom.rows[0]
+      room: chatRoom.rows[0],
     });
-
   } catch (err) {
     console.error("🔥 Match kabul hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 
 /**
