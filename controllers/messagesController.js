@@ -8,6 +8,7 @@ import { pool } from "../db.js";
 export const getChatMessages = async (req, res) => {
   try {
     const roomId = req.params.room_id;
+    console.log("🔥 DEBUG → roomId:", roomId);
 
     // 1) Chat oda bilgisi
     const roomQuery = await pool.query(
@@ -20,11 +21,15 @@ export const getChatMessages = async (req, res) => {
       [roomId]
     );
 
+    console.log("🔥 DEBUG → roomQuery.rows:", roomQuery.rows);
+
     if (roomQuery.rows.length === 0) {
+      console.log("❌ DEBUG → Chat odası bulunamadı.");
       return res.status(404).json({ error: "Chat odası bulunamadı." });
     }
 
     const room = roomQuery.rows[0];
+    console.log("🔥 DEBUG → ROOM:", room);
 
     // 2) Mesajlar
     const messagesQuery = await pool.query(
@@ -45,21 +50,20 @@ export const getChatMessages = async (req, res) => {
       [roomId]
     );
 
+    console.log("🔥 DEBUG → messages count:", messagesQuery.rows.length);
+
     const isLocked = room.is_locked;
 
-    // 🔥 Tek tip JSON formatı
     return res.json({
       room,
       messages: isLocked ? [] : messagesQuery.rows,
-      locked: isLocked
+      locked: isLocked,
     });
-
   } catch (err) {
-    console.error("🔥 getChatMessages Error:", err);
-    return res.status(500).json({ error: "Sunucu hatası" });
+    console.error("🔥 FINAL ERROR getChatMessages:", err);
+    return res.status(500).json({ error: "Sunucu hatası", detail: err.message });
   }
 };
-
 
 
 /**
