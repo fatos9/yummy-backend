@@ -9,7 +9,7 @@ export const getChatMessages = async (req, res) => {
   try {
     const roomId = req.params.room_id;
 
-    // 1) Chat odasını al
+    // 1) Chat oda bilgisi
     const roomQuery = await pool.query(
       `
       SELECT id, user1_id, user2_id, is_locked
@@ -26,7 +26,7 @@ export const getChatMessages = async (req, res) => {
 
     const room = roomQuery.rows[0];
 
-    // 2) Mesajları al
+    // 2) Mesajlar
     const messagesQuery = await pool.query(
       `
       SELECT 
@@ -45,24 +45,18 @@ export const getChatMessages = async (req, res) => {
       [roomId]
     );
 
-    // Oda kilitli ise özel döndür
-    if (room.is_locked) {
-      return res.json({
-        room,
-        messages: [],
-        error: "Bu sohbet kapanmış."
-      });
-    }
+    const isLocked = room.is_locked;
 
-    // Normal döndür
+    // 🔥 Tek tip JSON formatı
     return res.json({
       room,
-      messages: messagesQuery.rows
+      messages: isLocked ? [] : messagesQuery.rows,
+      locked: isLocked
     });
 
   } catch (err) {
     console.error("🔥 getChatMessages Error:", err);
-    res.status(500).json({ error: "Sunucu hatası" });
+    return res.status(500).json({ error: "Sunucu hatası" });
   }
 };
 
