@@ -65,7 +65,6 @@ export const getChatMessages = async (req, res) => {
   }
 };
 
-
 /**
  * POST /chat/send
  */
