@@ -34,7 +34,7 @@ export const getChatMessages = async (req, res) => {
          u.username,
          u.photo_url
        FROM messages m
-       LEFT JOIN auth_users u ON u.uid = m.sender_id
+       LEFT JOIN auth_users u ON u.firebase_uid = m.sender_id
        WHERE m.room_id = $1
        ORDER BY m.created_at ASC`,
       [roomId]
@@ -89,7 +89,6 @@ export const sendMessage = async (req, res) => {
 // GET /chat/rooms
 // ---------------------------------------------------
 export const getUserChatRooms = async (req, res) => {
-  
   try {
     const uid = req.user.uid;
 
@@ -102,7 +101,7 @@ export const getUserChatRooms = async (req, res) => {
          m.created_at AS last_message_time
        FROM chat_rooms cr
        LEFT JOIN auth_users u
-         ON u.uid = 
+         ON u.firebase_uid = 
            CASE WHEN cr.user1_id = $1 THEN cr.user2_id ELSE cr.user1_id END
        LEFT JOIN LATERAL (
          SELECT message, created_at
