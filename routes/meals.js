@@ -6,7 +6,7 @@ import {
   getMeals,
   getMealById,
   deleteMeal
-} from "../controllers/mealController.js"; // ✅ DOĞRU DOSYA
+} from "../controllers/mealsController.js";
 
 const router = express.Router();
 
