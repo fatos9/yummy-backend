@@ -36,6 +36,9 @@ app.use("/notifications", notificationsRouter);
 app.use("/rating", ratingRouter);
 app.use("/categories", categoriesRouter);
 app.use("/allergens", allergenRouter);
+import uploadRouter from "./routes/upload.js";
+app.use("/upload", uploadRouter);
+
 
 // PORT FIXED
 const PORT = process.env.PORT || 4000;
