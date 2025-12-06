@@ -2,40 +2,60 @@
 import { pool } from "../db.js";
 
 /**
- * POST /meals
- * Yeni öğün ekler — günlük 1 öğün limiti (premium hariç)
+ * 📌 JSON Parse Helper — DB'de bozuk data olsa bile patlamasını engeller
+ */
+const safeJSON = (value) => {
+  if (!value) return null;
+  try {
+    return typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * --------------------------------------------------------------------
+ *  POST /meals → Yeni öğün ekle
+ * --------------------------------------------------------------------
  */
 export const addMeal = async (req, res) => {
   try {
     const {
       name,
       category,
-      image_url,
+      image_url, // opsiyonel (fallback var)
       restaurant_name,
-      allergens,
-      user_location,
-      restaurant_location
+      allergens = [],
+      user_location = null,
+      restaurant_location = null
     } = req.body;
 
-    if (!name || !image_url) {
-      return res.status(400).json({ error: "name ve image_url zorunlu" });
+    // ---------------------------------------------------------
+    // VALIDATION
+    // ---------------------------------------------------------
+    if (!name) {
+      return res.status(400).json({ error: "Yemek adı zorunlu" });
+    }
+
+    if (!category) {
+      return res.status(400).json({ error: "Kategori zorunlu" });
     }
 
     const userId = req.user.uid;
 
-    // 🔥 Kullanıcı premium mu?
+    // ---------------------------------------------------------
+    // PREMIUM CHECK
+    // ---------------------------------------------------------
     const userInfo = await pool.query(
-      `
-      SELECT is_premium
-      FROM auth_users
-      WHERE firebase_uid = $1
-      `,
+      `SELECT is_premium FROM auth_users WHERE firebase_uid = $1`,
       [userId]
     );
 
-    const isPremium = userInfo.rows[0]?.is_premium;
+    const isPremium = userInfo.rows[0]?.is_premium === true;
 
-    // 🔴 PREMIUM DEĞİLSE GÜNLÜK 1 LİMİT KONTROLÜ
+    // ---------------------------------------------------------
+    // GÜNLÜK 1 ÖĞÜN LİMİTİ
+    // ---------------------------------------------------------
     if (!isPremium) {
       const todaysMeal = await pool.query(
         `
@@ -43,7 +63,6 @@ export const addMeal = async (req, res) => {
         FROM meals
         WHERE user_id = $1
         AND DATE(createdat) = CURRENT_DATE
-        LIMIT 1
         `,
         [userId]
       );
@@ -55,11 +74,13 @@ export const addMeal = async (req, res) => {
       }
     }
 
-    // 🔥 ÖĞÜN EKLEME
-    const insertMeal = await pool.query(
+    // ---------------------------------------------------------
+    // DB'YE KAYDET
+    // ---------------------------------------------------------
+    const inserted = await pool.query(
       `
       INSERT INTO meals (
-        name,
+        name, 
         image_url,
         category,
         user_id,
@@ -73,17 +94,24 @@ export const addMeal = async (req, res) => {
       `,
       [
         name,
-        image_url,
+        image_url || null,
         category,
         userId,
         restaurant_name || null,
-        allergens || null,
-        user_location || null,
-        restaurant_location || null
+        JSON.stringify(allergens || []),
+        JSON.stringify(user_location),
+        JSON.stringify(restaurant_location)
       ]
     );
 
-    return res.json(insertMeal.rows[0]);
+    const meal = inserted.rows[0];
+
+    return res.json({
+      ...meal,
+      allergens: safeJSON(meal.allergens),
+      user_location: safeJSON(meal.user_location),
+      restaurant_location: safeJSON(meal.restaurant_location)
+    });
 
   } catch (err) {
     console.error("🔥 Meal ekleme hatası:", err);
@@ -91,20 +119,27 @@ export const addMeal = async (req, res) => {
   }
 };
 
-
-
 /**
- * GET /meals
- * Tüm öğünleri listeler
+ * --------------------------------------------------------------------
+ *  GET /meals → Tüm öğünleri listele
+ * --------------------------------------------------------------------
  */
 export const getMeals = async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT * FROM meals
+      SELECT *
+      FROM meals
       ORDER BY createdat DESC
     `);
 
-    return res.json(result.rows);
+    const meals = result.rows.map((meal) => ({
+      ...meal,
+      allergens: safeJSON(meal.allergens),
+      user_location: safeJSON(meal.user_location),
+      restaurant_location: safeJSON(meal.restaurant_location)
+    }));
+
+    return res.json(meals);
 
   } catch (err) {
     console.error("🔥 Meal listeleme hatası:", err);
@@ -112,11 +147,10 @@ export const getMeals = async (req, res) => {
   }
 };
 
-
-
 /**
- * GET /meals/:id
- * Tekil meal detayı
+ * --------------------------------------------------------------------
+ *  GET /meals/:id → Tekil meal detayı
+ * --------------------------------------------------------------------
  */
 export const getMealById = async (req, res) => {
   try {
@@ -131,7 +165,14 @@ export const getMealById = async (req, res) => {
       return res.status(404).json({ error: "Öğün bulunamadı" });
     }
 
-    return res.json(result.rows[0]);
+    const meal = result.rows[0];
+
+    return res.json({
+      ...meal,
+      allergens: safeJSON(meal.allergens),
+      user_location: safeJSON(meal.user_location),
+      restaurant_location: safeJSON(meal.restaurant_location)
+    });
 
   } catch (err) {
     console.error("🔥 Meal detay hatası:", err);
@@ -139,11 +180,10 @@ export const getMealById = async (req, res) => {
   }
 };
 
-
-
 /**
- * DELETE /meals/:id
- * Kullanıcı kendi meal'ini silebilir
+ * --------------------------------------------------------------------
+ *  DELETE /meals/:id → Kullanıcı kendi meal’ini silebilir
+ * --------------------------------------------------------------------
  */
 export const deleteMeal = async (req, res) => {
   try {
@@ -164,7 +204,6 @@ export const deleteMeal = async (req, res) => {
       return res.status(403).json({ error: "Bu öğünü silemezsin" });
     }
 
-    // Meal sil
     await pool.query(`DELETE FROM meals WHERE id = $1`, [mealId]);
 
     return res.json({ success: true });
