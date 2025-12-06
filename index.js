@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Routers
 import mealsRouter from "./routes/meals.js";
 import profileRouter from "./routes/profile.js";
 import matchRouter from "./routes/match.js";
@@ -15,26 +16,28 @@ import allergenRouter from "./routes/allergen.js";
 import authRouter from "./routes/auth.js";
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-// Root test
+// ROOT TEST
 app.get("/", (req, res) => {
-  res.send("Yummy Yum backend çalışıyor 🎉");
+  res.send("🍽️ Yummy Yum Backend is Running!");
 });
 
-// Routers
+// API ROUTES
+app.use("/auth", authRouter);
 app.use("/meals", mealsRouter);
 app.use("/profile", profileRouter);
 app.use("/match", matchRouter);
-app.use("/chat", messagesRouter);
+app.use("/messages", messagesRouter); // 🔥 chat yerine /messages daha mantıklı
 app.use("/notifications", notificationsRouter);
 app.use("/rating", ratingRouter);
 app.use("/categories", categoriesRouter);
 app.use("/allergens", allergenRouter);
-app.use("/auth", authRouter);
 
-// Start server
-app.listen(process.env.PORT, () => {
-  console.log("🚀 Server başlatıldı PORT:", process.env.PORT);
+// PORT FIXED
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`🚀 Backend running on port ${PORT}`);
 });
