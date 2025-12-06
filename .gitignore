@@ -140,3 +140,5 @@ vite.config.ts.timestamp-*
 
 serviceAccountKey.json
 serviceAccountKey2.json
+
+.env
