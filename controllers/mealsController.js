@@ -15,7 +15,7 @@ const safeJSON = (value) => {
 
 /**
  * --------------------------------------------------------------------
- *  POST /meals → Yeni öğün ekle
+ *  POST /meals → Yeni öğün ekle (FINAL VERSION)
  * --------------------------------------------------------------------
  */
 export const addMeal = async (req, res) => {
@@ -23,7 +23,7 @@ export const addMeal = async (req, res) => {
     const {
       name,
       category,
-      image_url, // opsiyonel (fallback var)
+      image_url,
       restaurant_name,
       allergens = [],
       user_location = null,
@@ -54,7 +54,7 @@ export const addMeal = async (req, res) => {
     const isPremium = userInfo.rows[0]?.is_premium === true;
 
     // ---------------------------------------------------------
-    // GÜNLÜK 1 ÖĞÜN LİMİTİ
+    // GÜNLÜK LIMIT
     // ---------------------------------------------------------
     if (!isPremium) {
       const todaysMeal = await pool.query(
@@ -75,12 +75,27 @@ export const addMeal = async (req, res) => {
     }
 
     // ---------------------------------------------------------
+    // ALLERGENS → PG ARRAY FORMAT
+    // ["A","B"] --> {"A","B"}
+    // ---------------------------------------------------------
+    const pgAllergens =
+      Array.isArray(allergens) && allergens.length > 0
+        ? `{${allergens.map(a => `"${a}"`).join(",")}}`
+        : null;
+
+    // ---------------------------------------------------------
+    // JSON KOLONLARI
+    // ---------------------------------------------------------
+    const pgUserLoc = user_location ? JSON.stringify(user_location) : null;
+    const pgRestLoc = restaurant_location ? JSON.stringify(restaurant_location) : null;
+
+    // ---------------------------------------------------------
     // DB'YE KAYDET
     // ---------------------------------------------------------
     const inserted = await pool.query(
       `
       INSERT INTO meals (
-        name, 
+        name,
         image_url,
         category,
         user_id,
@@ -98,26 +113,32 @@ export const addMeal = async (req, res) => {
         category,
         userId,
         restaurant_name || null,
-        JSON.stringify(allergens || []),
-        JSON.stringify(user_location),
-        JSON.stringify(restaurant_location)
+        pgAllergens,
+        pgUserLoc,
+        pgRestLoc
       ]
     );
 
     const meal = inserted.rows[0];
 
-    return res.json({
+    // ---------------------------------------------------------
+    // RESPONSE (JSON formatına geri çeviriyoruz)
+    // ---------------------------------------------------------
+    const parsedMeal = {
       ...meal,
-      allergens: safeJSON(meal.allergens),
-      user_location: safeJSON(meal.user_location),
-      restaurant_location: safeJSON(meal.restaurant_location)
-    });
+      allergens: meal.allergens || [],
+      user_location: meal.user_location ? JSON.parse(meal.user_location) : null,
+      restaurant_location: meal.restaurant_location ? JSON.parse(meal.restaurant_location) : null,
+    };
+
+    return res.json(parsedMeal);
 
   } catch (err) {
     console.error("🔥 Meal ekleme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 /**
  * --------------------------------------------------------------------
