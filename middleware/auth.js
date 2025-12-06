@@ -1,4 +1,4 @@
-import admin from "../firebase.js";
+import admin from "../firebaseAdmin.js";
 
 export const auth = async (req, res, next) => {
   try {
@@ -13,13 +13,13 @@ export const auth = async (req, res, next) => {
     const decoded = await admin.auth().verifyIdToken(token);
 
     req.user = {
-      uid: decoded.uid || decoded.user_id,
-      email: decoded.email
+      uid: decoded.uid,
+      email: decoded.email || null,
     };
 
     next();
   } catch (err) {
-    console.error("❌ Auth Middleware Hatası:", err);
-    return res.status(401).json({ error: "Geçersiz veya süresi dolmuş token" });
+    console.error("❌ Auth Hatası:", err);
+    return res.status(401).json({ error: "Geçersiz token" });
   }
 };
