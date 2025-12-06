@@ -30,68 +30,12 @@ export const addMeal = async (req, res) => {
       restaurant_location = null
     } = req.body;
 
-    // ---------------------------------------------------------
-    // VALIDATION
-    // ---------------------------------------------------------
-    if (!name) {
-      return res.status(400).json({ error: "Yemek adı zorunlu" });
-    }
-
-    if (!category) {
-      return res.status(400).json({ error: "Kategori zorunlu" });
+    if (!name || !category) {
+      return res.status(400).json({ error: "name ve category zorunlu" });
     }
 
     const userId = req.user.uid;
 
-    // ---------------------------------------------------------
-    // PREMIUM CHECK
-    // ---------------------------------------------------------
-    const userInfo = await pool.query(
-      `SELECT is_premium FROM auth_users WHERE firebase_uid = $1`,
-      [userId]
-    );
-
-    const isPremium = userInfo.rows[0]?.is_premium === true;
-
-    // ---------------------------------------------------------
-    // GÜNLÜK LIMIT
-    // ---------------------------------------------------------
-    if (!isPremium) {
-      const todaysMeal = await pool.query(
-        `
-        SELECT id 
-        FROM meals
-        WHERE user_id = $1
-        AND DATE(createdat) = CURRENT_DATE
-        `,
-        [userId]
-      );
-
-      if (todaysMeal.rows.length > 0) {
-        return res.status(400).json({
-          error: "Bugün zaten bir öğün paylaştın. Yarın tekrar deneyebilirsin."
-        });
-      }
-    }
-
-    // ---------------------------------------------------------
-    // ALLERGENS → PG ARRAY FORMAT
-    // ["A","B"] --> {"A","B"}
-    // ---------------------------------------------------------
-    const pgAllergens =
-      Array.isArray(allergens) && allergens.length > 0
-        ? `{${allergens.map(a => `"${a}"`).join(",")}}`
-        : null;
-
-    // ---------------------------------------------------------
-    // JSON KOLONLARI
-    // ---------------------------------------------------------
-    const pgUserLoc = user_location ? JSON.stringify(user_location) : null;
-    const pgRestLoc = restaurant_location ? JSON.stringify(restaurant_location) : null;
-
-    // ---------------------------------------------------------
-    // DB'YE KAYDET
-    // ---------------------------------------------------------
     const inserted = await pool.query(
       `
       INSERT INTO meals (
@@ -113,31 +57,19 @@ export const addMeal = async (req, res) => {
         category,
         userId,
         restaurant_name || null,
-        pgAllergens,
-        pgUserLoc,
-        pgRestLoc
+        allergens,                // ❗ ARRAY olmalı, JSON.stringify değil
+        user_location,            // ❗ JSONB ALANI → stringify etmiyoruz
+        restaurant_location
       ]
     );
 
-    const meal = inserted.rows[0];
-
-    // ---------------------------------------------------------
-    // RESPONSE (JSON formatına geri çeviriyoruz)
-    // ---------------------------------------------------------
-    const parsedMeal = {
-      ...meal,
-      allergens: meal.allergens || [],
-      user_location: meal.user_location ? JSON.parse(meal.user_location) : null,
-      restaurant_location: meal.restaurant_location ? JSON.parse(meal.restaurant_location) : null,
-    };
-
-    return res.json(parsedMeal);
-
+    return res.json(inserted.rows[0]);  // ✔ SAF DÖN
   } catch (err) {
     console.error("🔥 Meal ekleme hatası:", err);
-    return res.status(500).json({ error: "Server hatası" });
+    return res.status(500).json({ error: "Server hatası", detail: err.message });
   }
 };
+
 
 
 /**
