@@ -11,7 +11,10 @@ import {
 const router = express.Router();
 
 // Yeni öğün ekleme (auth zorunlu)
-router.post("/", auth, addMeal);
+router.post("/", auth, (req, res, next) => {
+  console.log("🔥 /meals POST endpoint HIT!");
+  next();
+}, addMeal);
 
 // Tüm öğünleri çek (public)
 router.get("/", getMeals);
