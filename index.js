@@ -14,7 +14,7 @@ import ratingRouter from "./routes/rating.js";
 import categoriesRouter from "./routes/categories.js";
 import allergenRouter from "./routes/allergen.js";
 import authRouter from "./routes/auth.js";
-
+import chatRoutes from "./routes/chatRoutes.js";
 const app = express();
 
 app.use(cors());
@@ -36,6 +36,7 @@ app.use("/notifications", notificationsRouter);
 app.use("/rating", ratingRouter);
 app.use("/categories", categoriesRouter);
 app.use("/allergens", allergenRouter);
+app.use("/chat", chatRoutes);
 
 // PORT FIXED
 const PORT = process.env.PORT || 4000;
