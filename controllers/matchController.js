@@ -90,7 +90,7 @@ export const getReceivedMatches = async (req, res) => {
       LEFT JOIN auth_users u ON u.firebase_uid = mr.from_user_id
       LEFT JOIN meals m ON m.id = mr.sender_meal_id
       WHERE mr.to_user_id = $1
-      ORDER BY mr.createdat DESC
+      ORDER BY mr.created_at DESC
       `,
       [uid]
     );
