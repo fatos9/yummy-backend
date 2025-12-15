@@ -14,51 +14,60 @@ export const sendMatchRequest = async (req, res) => {
       return res.status(400).json({ error: "Eksik bilgi" });
     }
 
-    // Aynı istek kontrolü
     const check = await pool.query(
       `
       SELECT 1 FROM match_requests
-      WHERE from_user_id = $1 AND to_user_id = $2 AND meal_id = $3
-      LIMIT 1
+      WHERE from_user_id=$1 AND to_user_id=$2 AND meal_id=$3
       `,
       [fromUserId, to_user_id, meal_id]
     );
 
-    if (check.rows.length > 0) {
+    if (check.rows.length) {
       return res.json({ message: "Zaten istek gönderilmiş" });
     }
 
-    // Göndericinin kendi son öğünü (sender_meal_id)
     const senderMeal = await pool.query(
       `
-      SELECT id
-      FROM meals
-      WHERE user_id = $1
+      SELECT id FROM meals
+      WHERE user_id=$1
       ORDER BY createdat DESC
       LIMIT 1
       `,
       [fromUserId]
     );
 
-    const senderMealId = senderMeal.rows[0]?.id || null;
+    if (!senderMeal.rows.length) {
+      return res.status(400).json({
+        error: "Göndericiye ait öğün bulunamadı"
+      });
+    }
 
-    // Yeni istek ekle
+    const senderMealId = senderMeal.rows[0].id;
+
+    console.log("📌 MATCH INSERT VALUES:", {
+      fromUserId,
+      to_user_id,
+      meal_id,
+      senderMealId
+    });
+
     const insert = await pool.query(
       `
-      INSERT INTO match_requests (from_user_id, to_user_id, meal_id, sender_meal_id)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO match_requests
+      (from_user_id, to_user_id, meal_id, sender_meal_id)
+      VALUES ($1,$2,$3,$4)
       RETURNING *;
       `,
       [fromUserId, to_user_id, meal_id, senderMealId]
     );
 
     return res.json(insert.rows[0]);
-
   } catch (err) {
     console.error("🔥 Match istek gönderme hatası:", err);
-    return res.status(500).json({ error: "Server hatası" });
+    return res.status(500).json({ error: err.message });
   }
 };
+
 
 
 /**

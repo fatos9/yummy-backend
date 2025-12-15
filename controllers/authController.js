@@ -4,7 +4,7 @@ export const registerUser = async (req, res) => {
   try {
     console.log("📥 BODY:", req.body);
 
-    const { firebase_uid, email, username } = req.body;
+    const { firebase_uid, email, username } = req.body;3
 
     if (!firebase_uid || !email)
       return res.status(400).json({ error: "eksik parametre" });
