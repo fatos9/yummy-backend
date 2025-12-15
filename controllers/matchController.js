@@ -159,16 +159,16 @@ export const acceptMatch = async (req, res) => {
     const u = userInfo.rows[0];
 
     // Premium değilse günlük 1 limit
-    if (!u.is_premium) {
-      const now = new Date();
-      const last = u.last_accept_at ? new Date(u.last_accept_at) : null;
+    // if (!u.is_premium) {
+    //   const now = new Date();
+    //   const last = u.last_accept_at ? new Date(u.last_accept_at) : null;
 
-      if (last && now - last < 24 * 60 * 60 * 1000) {
-        return res.status(400).json({
-          error: "Günde yalnızca 1 eşleşme kabul edebilirsin."
-        });
-      }
-    }
+    //   if (last && now - last < 24 * 60 * 60 * 1000) {
+    //     return res.status(400).json({
+    //       error: "Günde yalnızca 1 eşleşme kabul edebilirsin."
+    //     });
+    //   }
+    // }
 
     // İstek doğrulama
     const check = await pool.query(
