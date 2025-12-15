@@ -1,5 +1,68 @@
 import { pool } from "../db.js";
 
+/* =====================================================
+   1️⃣ TÜM CHAT ROOMLAR (LİSTE)
+   GET /chat/rooms
+===================================================== */
+export const getChatRooms = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+
+    const result = await pool.query(
+      `
+      SELECT
+        cr.id AS room_id,
+        cr.created_at,
+
+        -- karşı taraf
+        u.firebase_uid AS other_user_id,
+        u.username,
+        u.photo_url,
+
+        -- son mesaj
+        (
+          SELECT cm.message
+          FROM chat_messages cm
+          WHERE cm.room_id = cr.id
+          ORDER BY cm.created_at DESC
+          LIMIT 1
+        ) AS last_message,
+
+        (
+          SELECT cm.created_at
+          FROM chat_messages cm
+          WHERE cm.room_id = cr.id
+          ORDER BY cm.created_at DESC
+          LIMIT 1
+        ) AS last_message_at
+
+      FROM chat_rooms cr
+
+      JOIN auth_users u
+        ON u.firebase_uid =
+          CASE
+            WHEN cr.user1_id = $1 THEN cr.user2_id
+            ELSE cr.user1_id
+          END
+
+      WHERE cr.user1_id = $1 OR cr.user2_id = $1
+      ORDER BY last_message_at DESC NULLS LAST, cr.created_at DESC
+      `,
+      [uid]
+    );
+
+    return res.json(result.rows);
+
+  } catch (err) {
+    console.error("🔥 CHAT ROOMS ERROR:", err);
+    return res.status(500).json({ error: "Chat listesi alınamadı" });
+  }
+};
+
+/* =====================================================
+   2️⃣ TEK CHAT ROOM + MESAJLAR
+   GET /chat/room/:id
+===================================================== */
 export const getChatRoom = async (req, res) => {
   try {
     const uid = req.user.uid;
@@ -9,7 +72,7 @@ export const getChatRoom = async (req, res) => {
       return res.status(400).json({ error: "Geçersiz room id" });
     }
 
-    // 1️⃣ ROOM KONTROL
+    // 🔎 ROOM KONTROL
     const roomResult = await pool.query(
       `
       SELECT *
@@ -26,7 +89,7 @@ export const getChatRoom = async (req, res) => {
 
     const room = roomResult.rows[0];
 
-    // 2️⃣ MESAJLARI ÇEK
+    // 💬 MESAJLAR
     const messagesResult = await pool.query(
       `
       SELECT id, room_id, sender_id, message, created_at
@@ -39,7 +102,7 @@ export const getChatRoom = async (req, res) => {
 
     return res.json({
       room,
-      locked: false, // ileride match biterse true yaparsın
+      locked: false,
       messages: messagesResult.rows,
     });
 
