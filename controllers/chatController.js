@@ -111,3 +111,50 @@ export const getChatRoom = async (req, res) => {
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
+
+/* =====================================================
+   3️⃣ MESAJ GÖNDER
+   POST /chat/send
+===================================================== */
+export const sendChatMessage = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const { room_id, message } = req.body;
+
+    if (!room_id || !message?.trim()) {
+      return res.status(400).json({ error: "Eksik veri" });
+    }
+
+    // 🔒 Room kontrolü (yetki)
+    const roomCheck = await pool.query(
+      `
+      SELECT id
+      FROM chat_rooms
+      WHERE id = $1
+        AND ($2 = user1_id OR $2 = user2_id)
+      `,
+      [room_id, uid]
+    );
+
+    if (!roomCheck.rows.length) {
+      return res.status(403).json({ error: "Bu sohbet sana ait değil" });
+    }
+
+    // 💬 Mesaj ekle
+    const insert = await pool.query(
+      `
+      INSERT INTO chat_messages (room_id, sender_id, message)
+      VALUES ($1, $2, $3)
+      RETURNING id, room_id, sender_id, message, created_at
+      `,
+      [room_id, uid, message.trim()]
+    );
+
+    return res.json(insert.rows[0]);
+
+  } catch (err) {
+    console.error("🔥 SEND MESSAGE ERROR:", err);
+    return res.status(500).json({ error: "Mesaj gönderilemedi" });
+  }
+};
