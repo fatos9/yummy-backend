@@ -13,7 +13,7 @@ export const getNotifications = async (req, res) => {
       SELECT *
       FROM notifications
       WHERE user_id = $1
-      ORDER BY createdat DESC;
+      ORDER BY created_at DESC;
       `,
       [uid]
     );
