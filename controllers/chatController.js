@@ -101,11 +101,11 @@ export const getChatRoom = async (req, res) => {
     const otherUserResult = await pool.query(
       `
       SELECT
-        uid,
+        id,
         username,
         photo_url
       FROM auth_users
-      WHERE uid = $1
+      WHERE id = $1
       `,
       [otherUserId]
     );
