@@ -75,7 +75,12 @@ export const getChatRoom = async (req, res) => {
     if (Number.isNaN(roomId)) {
       return res.status(400).json({ error: "Geçersiz room id" });
     }
-
+    console.log(`
+      SELECT *
+      FROM chat_rooms
+      WHERE id = $1
+        AND ($2 = user1_id OR $2 = user2_id)
+      `);
     // 🔎 ROOM + YETKİ KONTROLÜ
     const roomResult = await pool.query(
       `
@@ -96,7 +101,14 @@ export const getChatRoom = async (req, res) => {
     // 👤 OTHER USER ID
     const otherUserId =
       room.user1_id === uid ? room.user2_id : room.user1_id;
-
+    console.log(`
+      SELECT
+        id,
+        username,
+        photo_url
+      FROM auth_users
+      WHERE id = $1
+      `);
     // 👤 OTHER USER INFO
     const otherUserResult = await pool.query(
       `
@@ -112,6 +124,17 @@ export const getChatRoom = async (req, res) => {
 
     const otherUser = otherUserResult.rows[0] || null;
 
+    console.log(`
+      SELECT
+        id,
+        room_id,
+        sender_id,
+        message,
+        created_at
+      FROM chat_messages
+      WHERE room_id = $1
+      ORDER BY created_at ASC
+      `);
     // 💬 MESAJLAR
     const messagesResult = await pool.query(
       `
