@@ -63,6 +63,10 @@ export const getChatRooms = async (req, res) => {
    2️⃣ TEK CHAT ROOM + MESAJLAR
    GET /chat/room/:id
 ===================================================== */
+/* =====================================================
+   2️⃣ TEK CHAT ROOM + MESAJLAR + OTHER USER
+   GET /chat/room/:id
+===================================================== */
 export const getChatRoom = async (req, res) => {
   try {
     const uid = req.user.uid;
@@ -72,7 +76,7 @@ export const getChatRoom = async (req, res) => {
       return res.status(400).json({ error: "Geçersiz room id" });
     }
 
-    // 🔎 ROOM KONTROL
+    // 🔎 ROOM + YETKİ KONTROLÜ
     const roomResult = await pool.query(
       `
       SELECT *
@@ -89,10 +93,34 @@ export const getChatRoom = async (req, res) => {
 
     const room = roomResult.rows[0];
 
+    // 👤 OTHER USER ID
+    const otherUserId =
+      room.user1_id === uid ? room.user2_id : room.user1_id;
+
+    // 👤 OTHER USER INFO
+    const otherUserResult = await pool.query(
+      `
+      SELECT
+        uid,
+        username,
+        photo_url
+      FROM users
+      WHERE uid = $1
+      `,
+      [otherUserId]
+    );
+
+    const otherUser = otherUserResult.rows[0] || null;
+
     // 💬 MESAJLAR
     const messagesResult = await pool.query(
       `
-      SELECT id, room_id, sender_id, message, created_at
+      SELECT
+        id,
+        room_id,
+        sender_id,
+        message,
+        created_at
       FROM chat_messages
       WHERE room_id = $1
       ORDER BY created_at ASC
@@ -101,8 +129,17 @@ export const getChatRoom = async (req, res) => {
     );
 
     return res.json({
-      room,
+      room: {
+        id: room.id,
+        match_id: room.match_id,
+        created_at: room.created_at,
+      },
       locked: false,
+      other_user: otherUser && {
+        id: otherUser.uid,
+        username: otherUser.username,
+        photo: otherUser.photo_url,
+      },
       messages: messagesResult.rows,
     });
 
@@ -111,7 +148,6 @@ export const getChatRoom = async (req, res) => {
     return res.status(500).json({ error: "Server hatası" });
   }
 };
-
 
 /* =====================================================
    3️⃣ MESAJ GÖNDER
