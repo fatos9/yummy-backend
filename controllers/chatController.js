@@ -104,7 +104,7 @@ export const getChatRoom = async (req, res) => {
         uid,
         username,
         photo_url
-      FROM users
+      FROM auth_users
       WHERE uid = $1
       `,
       [otherUserId]

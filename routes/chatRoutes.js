@@ -10,6 +10,6 @@ const router = express.Router();
 
 router.get("/rooms", auth, getChatRooms);
 router.get("/room/:id", auth, getChatRoom);
-router.post("/send", auth, sendChatMessage); // 🔥 BU
+router.post("/send", auth, sendChatMessage);
 
 export default router;
