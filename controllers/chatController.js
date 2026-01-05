@@ -6,7 +6,7 @@ import { pool } from "../db.js";
 ===================================================== */
 export const getChatRooms = async (req, res) => {
   try {
-    const uid = req.user.uid;
+    const uid = req.user.uid; // firebase_uid
 
     const result = await pool.query(
       `
@@ -37,7 +37,6 @@ export const getChatRooms = async (req, res) => {
         ) AS last_message_at
 
       FROM chat_rooms cr
-
       JOIN auth_users u
         ON u.firebase_uid =
           CASE
@@ -52,7 +51,6 @@ export const getChatRooms = async (req, res) => {
     );
 
     return res.json(result.rows);
-
   } catch (err) {
     console.error("🔥 CHAT ROOMS ERROR:", err);
     return res.status(500).json({ error: "Chat listesi alınamadı" });
@@ -63,25 +61,16 @@ export const getChatRooms = async (req, res) => {
    2️⃣ TEK CHAT ROOM + MESAJLAR
    GET /chat/room/:id
 ===================================================== */
-/* =====================================================
-   2️⃣ TEK CHAT ROOM + MESAJLAR + OTHER USER
-   GET /chat/room/:id
-===================================================== */
 export const getChatRoom = async (req, res) => {
   try {
-    const uid = req.user.uid;
+    const uid = req.user.uid; // firebase_uid
     const roomId = Number(req.params.id);
 
     if (Number.isNaN(roomId)) {
       return res.status(400).json({ error: "Geçersiz room id" });
     }
-    console.log(`
-      SELECT *
-      FROM chat_rooms
-      WHERE id = `+roomId+`
-        AND (`+uid+` = user1_id OR `+uid+` = user2_id)
-      `);
-    // 🔎 ROOM + YETKİ KONTROLÜ
+
+    // 🔒 ROOM + YETKİ
     const roomResult = await pool.query(
       `
       SELECT *
@@ -98,43 +87,25 @@ export const getChatRoom = async (req, res) => {
 
     const room = roomResult.rows[0];
 
-    // 👤 OTHER USER ID
-    const otherUserId =
+    // 👤 OTHER USER FIREBASE UID
+    const otherUserUid =
       room.user1_id === uid ? room.user2_id : room.user1_id;
-    console.log(`
-      SELECT
-        id,
-        username,
-        photo_url
-      FROM auth_users
-      WHERE id = `+otherUserId+`
-      `);
-    // 👤 OTHER USER INFO
+
+    // 👤 OTHER USER INFO (firebase_uid ile)
     const otherUserResult = await pool.query(
       `
       SELECT
-        id,
+        firebase_uid AS uid,
         username,
         photo_url
       FROM auth_users
-      WHERE id = $1
+      WHERE firebase_uid = $1
       `,
-      [otherUserId]
+      [otherUserUid]
     );
 
     const otherUser = otherUserResult.rows[0] || null;
 
-    console.log(`
-      SELECT
-        id,
-        room_id,
-        sender_id,
-        message,
-        created_at
-      FROM chat_messages
-      WHERE room_id = `+roomId+`
-      ORDER BY created_at ASC
-      `);
     // 💬 MESAJLAR
     const messagesResult = await pool.query(
       `
@@ -159,13 +130,12 @@ export const getChatRoom = async (req, res) => {
       },
       locked: false,
       other_user: otherUser && {
-        id: otherUser.uid,
+        uid: otherUser.uid, // firebase_uid
         username: otherUser.username,
         photo: otherUser.photo_url,
       },
-      messages: messagesResult.rows,
+      messages: messagesResult.rows, // [] olabilir
     });
-
   } catch (err) {
     console.error("🔥 CHAT LOAD ERROR:", err);
     return res.status(500).json({ error: "Server hatası" });
@@ -178,14 +148,14 @@ export const getChatRoom = async (req, res) => {
 ===================================================== */
 export const sendChatMessage = async (req, res) => {
   try {
-    const uid = req.user.uid;
+    const uid = req.user.uid; // firebase_uid
     const { room_id, message } = req.body;
 
     if (!room_id || !message?.trim()) {
       return res.status(400).json({ error: "Eksik veri" });
     }
 
-    // 🔒 Room kontrolü (yetki)
+    // 🔒 Room yetkisi
     const roomCheck = await pool.query(
       `
       SELECT id
@@ -211,7 +181,6 @@ export const sendChatMessage = async (req, res) => {
     );
 
     return res.json(insert.rows[0]);
-
   } catch (err) {
     console.error("🔥 SEND MESSAGE ERROR:", err);
     return res.status(500).json({ error: "Mesaj gönderilemedi" });
