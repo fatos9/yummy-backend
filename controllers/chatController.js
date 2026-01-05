@@ -70,7 +70,7 @@ export const getChatRooms = async (req, res) => {
 export const getChatRoom = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const roomId = req.params.id;
+    const roomId = Number(req.params.id);
 
     if (Number.isNaN(roomId)) {
       return res.status(400).json({ error: "Geçersiz room id" });
@@ -78,15 +78,15 @@ export const getChatRoom = async (req, res) => {
     console.log(`
       SELECT *
       FROM chat_rooms
-      WHERE firebase_uid = $1
-        AND ($2 = user1_id OR $2 = user2_id)
+      WHERE id = `+roomId+`
+        AND (`+uid+` = user1_id OR `+uid+` = user2_id)
       `);
     // 🔎 ROOM + YETKİ KONTROLÜ
     const roomResult = await pool.query(
       `
       SELECT *
       FROM chat_rooms
-      WHERE firebase_uid = $1
+      WHERE id = $1
         AND ($2 = user1_id OR $2 = user2_id)
       `,
       [roomId, uid]
@@ -107,7 +107,7 @@ export const getChatRoom = async (req, res) => {
         username,
         photo_url
       FROM auth_users
-      WHERE id = $1
+      WHERE id = `+otherUserId+`
       `);
     // 👤 OTHER USER INFO
     const otherUserResult = await pool.query(
@@ -132,7 +132,7 @@ export const getChatRoom = async (req, res) => {
         message,
         created_at
       FROM chat_messages
-      WHERE room_id = $1
+      WHERE room_id = `+roomId+`
       ORDER BY created_at ASC
       `);
     // 💬 MESAJLAR
@@ -159,7 +159,7 @@ export const getChatRoom = async (req, res) => {
       },
       locked: false,
       other_user: otherUser && {
-        id: otherUser.firebase_uid,
+        id: otherUser.uid,
         username: otherUser.username,
         photo: otherUser.photo_url,
       },
