@@ -70,7 +70,7 @@ export const getChatRooms = async (req, res) => {
 export const getChatRoom = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const roomId = Number(req.params.id);
+    const roomId = req.params.id;
 
     if (Number.isNaN(roomId)) {
       return res.status(400).json({ error: "Geçersiz room id" });
@@ -78,7 +78,7 @@ export const getChatRoom = async (req, res) => {
     console.log(`
       SELECT *
       FROM chat_rooms
-      WHERE id = $1
+      WHERE firebase_uid = $1
         AND ($2 = user1_id OR $2 = user2_id)
       `);
     // 🔎 ROOM + YETKİ KONTROLÜ
@@ -86,7 +86,7 @@ export const getChatRoom = async (req, res) => {
       `
       SELECT *
       FROM chat_rooms
-      WHERE id = $1
+      WHERE firebase_uid = $1
         AND ($2 = user1_id OR $2 = user2_id)
       `,
       [roomId, uid]
@@ -159,7 +159,7 @@ export const getChatRoom = async (req, res) => {
       },
       locked: false,
       other_user: otherUser && {
-        id: otherUser.uid,
+        id: otherUser.firebase_uid,
         username: otherUser.username,
         photo: otherUser.photo_url,
       },
