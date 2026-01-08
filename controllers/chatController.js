@@ -58,7 +58,7 @@ export const getChatRooms = async (req, res) => {
 };
 
 /* =====================================================
-   2️⃣ TEK CHAT ROOM + MESAJLAR
+   2️⃣ TEK CHAT ROOM + MESAJLAR + MEAL INFO
    GET /chat/room/:id
 ===================================================== */
 export const getChatRoom = async (req, res) => {
@@ -70,7 +70,9 @@ export const getChatRoom = async (req, res) => {
       return res.status(400).json({ error: "Geçersiz room id" });
     }
 
+    // --------------------------------------------------
     // 🔒 ROOM + YETKİ
+    // --------------------------------------------------
     const roomResult = await pool.query(
       `
       SELECT *
@@ -87,11 +89,12 @@ export const getChatRoom = async (req, res) => {
 
     const room = roomResult.rows[0];
 
-    // 👤 OTHER USER FIREBASE UID
+    // --------------------------------------------------
+    // 👤 OTHER USER
+    // --------------------------------------------------
     const otherUserUid =
       room.user1_id === uid ? room.user2_id : room.user1_id;
 
-    // 👤 OTHER USER INFO (firebase_uid ile)
     const otherUserResult = await pool.query(
       `
       SELECT
@@ -106,7 +109,62 @@ export const getChatRoom = async (req, res) => {
 
     const otherUser = otherUserResult.rows[0] || null;
 
-    // 💬 MESAJLAR
+    // --------------------------------------------------
+    // 🍽️ MEAL INFO (MATCH BASED)
+    // --------------------------------------------------
+    let mealInfo = null;
+
+    if (room.match_id) {
+      const mealResult = await pool.query(
+        `
+        SELECT
+          mu.id   AS my_meal_id,
+          mu.name AS my_meal_name,
+          mu.image_url AS my_meal_image,
+
+          ou.id   AS other_meal_id,
+          ou.name AS other_meal_name,
+          ou.image_url AS other_meal_image
+
+        FROM matches m
+
+        JOIN meals mu ON mu.id =
+          CASE
+            WHEN m.user1_id = $1 THEN m.user1_meal_id
+            ELSE m.user2_meal_id
+          END
+
+        JOIN meals ou ON ou.id =
+          CASE
+            WHEN m.user1_id = $1 THEN m.user2_meal_id
+            ELSE m.user1_meal_id
+          END
+
+        WHERE m.id = $2
+        `,
+        [uid, room.match_id]
+      );
+
+      if (mealResult.rows.length) {
+        const r = mealResult.rows[0];
+        mealInfo = {
+          my_meal: {
+            id: r.my_meal_id,
+            name: r.my_meal_name,
+            image: r.my_meal_image,
+          },
+          other_meal: {
+            id: r.other_meal_id,
+            name: r.other_meal_name,
+            image: r.other_meal_image,
+          },
+        };
+      }
+    }
+
+    // --------------------------------------------------
+    // 💬 MESSAGES
+    // --------------------------------------------------
     const messagesResult = await pool.query(
       `
       SELECT
@@ -122,6 +180,9 @@ export const getChatRoom = async (req, res) => {
       [roomId]
     );
 
+    // --------------------------------------------------
+    // ✅ RESPONSE
+    // --------------------------------------------------
     return res.json({
       room: {
         id: room.id,
@@ -130,11 +191,12 @@ export const getChatRoom = async (req, res) => {
       },
       locked: false,
       other_user: otherUser && {
-        uid: otherUser.uid, // firebase_uid
+        uid: otherUser.uid,
         username: otherUser.username,
         photo: otherUser.photo_url,
       },
-      messages: messagesResult.rows, // [] olabilir
+      meal_info: mealInfo, // 👈 ARTIK VAR
+      messages: messagesResult.rows,
     });
   } catch (err) {
     console.error("🔥 CHAT LOAD ERROR:", err);
