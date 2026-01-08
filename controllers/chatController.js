@@ -186,3 +186,58 @@ export const sendChatMessage = async (req, res) => {
     return res.status(500).json({ error: "Mesaj gönderilemedi" });
   }
 };
+
+/* =====================================================
+   4️⃣ YENİ MESAJLAR (POLLING)
+   GET /chat/messages?room_id=&after=
+===================================================== */
+export const getNewChatMessages = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const roomId = Number(req.query.room_id);
+    const after = req.query.after;
+
+    if (!roomId || Number.isNaN(roomId) || !after) {
+      return res.status(400).json({ error: "Eksik parametre" });
+    }
+
+    // 🔒 Room yetkisi
+    const roomCheck = await pool.query(
+      `
+      SELECT id
+      FROM chat_rooms
+      WHERE id = $1
+        AND ($2 = user1_id OR $2 = user2_id)
+      `,
+      [roomId, uid]
+    );
+
+    if (!roomCheck.rows.length) {
+      return res.status(403).json({ error: "Yetkisiz erişim" });
+    }
+
+    // 💬 SADECE YENİ MESAJLAR
+    const messagesResult = await pool.query(
+      `
+      SELECT
+        id,
+        room_id,
+        sender_id,
+        message,
+        created_at
+      FROM chat_messages
+      WHERE room_id = $1
+        AND created_at > $2
+      ORDER BY created_at ASC
+      `,
+      [roomId, after]
+    );
+
+    return res.json({
+      messages: messagesResult.rows,
+    });
+  } catch (err) {
+    console.error("🔥 POLLING ERROR:", err);
+    return res.status(500).json({ error: "Mesajlar alınamadı" });
+  }
+};
