@@ -63,7 +63,7 @@ export const getChatRooms = async (req, res) => {
 ===================================================== */
 export const getChatRoom = async (req, res) => {
   try {
-    const uid = req.user.uid; // firebase_uid
+    const uid = req.user.uid;
     const roomId = Number(req.params.id);
 
     if (Number.isNaN(roomId)) {
@@ -71,7 +71,7 @@ export const getChatRoom = async (req, res) => {
     }
 
     // --------------------------------------------------
-    // 🔒 ROOM + YETKİ
+    // 🔒 CHAT ROOM + YETKİ
     // --------------------------------------------------
     const roomResult = await pool.query(
       `
@@ -97,10 +97,7 @@ export const getChatRoom = async (req, res) => {
 
     const otherUserResult = await pool.query(
       `
-      SELECT
-        firebase_uid AS uid,
-        username,
-        photo_url
+      SELECT firebase_uid AS uid, username, photo_url
       FROM auth_users
       WHERE firebase_uid = $1
       `,
@@ -110,7 +107,7 @@ export const getChatRoom = async (req, res) => {
     const otherUser = otherUserResult.rows[0] || null;
 
     // --------------------------------------------------
-    // 🍽️ MEAL INFO (FINAL & NET)
+    // 🍽️ MEAL INFO (SOURCE = MATCH_REQUESTS)
     // --------------------------------------------------
     let mealInfo = null;
 
@@ -118,21 +115,22 @@ export const getChatRoom = async (req, res) => {
       const mealResult = await pool.query(
         `
         SELECT
-          ma.user1_id,
-          ma.user2_id,
+          mr.from_user_id,
+          mr.to_user_id,
 
-          m1.id   AS user1_meal_id,
-          m1.name AS user1_meal_name,
-          m1.image_url AS user1_meal_image,
+          sm.id   AS sender_meal_id,
+          sm.name AS sender_meal_name,
+          sm.image_url AS sender_meal_image,
 
-          m2.id   AS user2_meal_id,
-          m2.name AS user2_meal_name,
-          m2.image_url AS user2_meal_image
+          rm.id   AS receiver_meal_id,
+          rm.name AS receiver_meal_name,
+          rm.image_url AS receiver_meal_image
 
-        FROM matches ma
-        LEFT JOIN meals m1 ON m1.id = ma.user1_meal_id
-        LEFT JOIN meals m2 ON m2.id = ma.user2_meal_id
-        WHERE ma.id = $1
+        FROM matches m
+        JOIN match_requests mr ON mr.id = m.request_id
+        LEFT JOIN meals sm ON sm.id = mr.sender_meal_id
+        LEFT JOIN meals rm ON rm.id = mr.meal_id
+        WHERE m.id = $1
         `,
         [room.match_id]
       );
@@ -140,32 +138,31 @@ export const getChatRoom = async (req, res) => {
       if (mealResult.rows.length) {
         const r = mealResult.rows[0];
 
-        // 🔁 my / other ayrımı UID ile
-        const isUser1 = r.user1_id === uid;
+        const isSender = r.from_user_id === uid;
 
         mealInfo = {
-          my_meal: isUser1
+          my_meal: isSender
             ? {
-                id: r.user1_meal_id,
-                name: r.user1_meal_name,
-                image: r.user1_meal_image,
+                id: r.sender_meal_id,
+                name: r.sender_meal_name,
+                image: r.sender_meal_image,
               }
             : {
-                id: r.user2_meal_id,
-                name: r.user2_meal_name,
-                image: r.user2_meal_image,
+                id: r.receiver_meal_id,
+                name: r.receiver_meal_name,
+                image: r.receiver_meal_image,
               },
 
-          other_meal: isUser1
+          other_meal: isSender
             ? {
-                id: r.user2_meal_id,
-                name: r.user2_meal_name,
-                image: r.user2_meal_image,
+                id: r.receiver_meal_id,
+                name: r.receiver_meal_name,
+                image: r.receiver_meal_image,
               }
             : {
-                id: r.user1_meal_id,
-                name: r.user1_meal_name,
-                image: r.user1_meal_image,
+                id: r.sender_meal_id,
+                name: r.sender_meal_name,
+                image: r.sender_meal_image,
               },
         };
       }
@@ -176,12 +173,7 @@ export const getChatRoom = async (req, res) => {
     // --------------------------------------------------
     const messagesResult = await pool.query(
       `
-      SELECT
-        id,
-        room_id,
-        sender_id,
-        message,
-        created_at
+      SELECT id, room_id, sender_id, message, created_at
       FROM chat_messages
       WHERE room_id = $1
       ORDER BY created_at ASC
@@ -190,7 +182,7 @@ export const getChatRoom = async (req, res) => {
     );
 
     // --------------------------------------------------
-    // ✅ RESPONSE (FINAL)
+    // ✅ RESPONSE
     // --------------------------------------------------
     return res.json({
       room: {
@@ -204,7 +196,7 @@ export const getChatRoom = async (req, res) => {
         username: otherUser.username,
         photo: otherUser.photo_url,
       },
-      meal_info: mealInfo, // 👈 FRONTEND ARTIK BUNU GÖRÜR
+      meal_info: mealInfo,
       messages: messagesResult.rows,
     });
   } catch (err) {
@@ -212,6 +204,7 @@ export const getChatRoom = async (req, res) => {
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
 
 /* =====================================================
    3️⃣ MESAJ GÖNDER
