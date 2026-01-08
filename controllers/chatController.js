@@ -58,7 +58,7 @@ export const getChatRooms = async (req, res) => {
 };
 
 /* =====================================================
-   2️⃣ TEK CHAT ROOM + MESAJLAR + MEAL INFO
+   2️⃣ TEK CHAT ROOM + MESAJLAR + MEAL INFO (FINAL)
    GET /chat/room/:id
 ===================================================== */
 export const getChatRoom = async (req, res) => {
@@ -110,7 +110,7 @@ export const getChatRoom = async (req, res) => {
     const otherUser = otherUserResult.rows[0] || null;
 
     // --------------------------------------------------
-    // 🍽️ MEAL INFO (MATCH BASED)
+    // 🍽️ MEAL INFO (FINAL & NET)
     // --------------------------------------------------
     let mealInfo = null;
 
@@ -118,46 +118,55 @@ export const getChatRoom = async (req, res) => {
       const mealResult = await pool.query(
         `
         SELECT
-          mu.id   AS my_meal_id,
-          mu.name AS my_meal_name,
-          mu.image_url AS my_meal_image,
+          ma.user1_id,
+          ma.user2_id,
 
-          ou.id   AS other_meal_id,
-          ou.name AS other_meal_name,
-          ou.image_url AS other_meal_image
+          m1.id   AS user1_meal_id,
+          m1.name AS user1_meal_name,
+          m1.image_url AS user1_meal_image,
 
-        FROM matches m
+          m2.id   AS user2_meal_id,
+          m2.name AS user2_meal_name,
+          m2.image_url AS user2_meal_image
 
-        JOIN meals mu ON mu.id =
-          CASE
-            WHEN m.user1_id = $1 THEN m.user1_meal_id
-            ELSE m.user2_meal_id
-          END
-
-        JOIN meals ou ON ou.id =
-          CASE
-            WHEN m.user1_id = $1 THEN m.user2_meal_id
-            ELSE m.user1_meal_id
-          END
-
-        WHERE m.id = $2
+        FROM matches ma
+        LEFT JOIN meals m1 ON m1.id = ma.user1_meal_id
+        LEFT JOIN meals m2 ON m2.id = ma.user2_meal_id
+        WHERE ma.id = $1
         `,
-        [uid, room.match_id]
+        [room.match_id]
       );
 
       if (mealResult.rows.length) {
         const r = mealResult.rows[0];
+
+        // 🔁 my / other ayrımı UID ile
+        const isUser1 = r.user1_id === uid;
+
         mealInfo = {
-          my_meal: {
-            id: r.my_meal_id,
-            name: r.my_meal_name,
-            image: r.my_meal_image,
-          },
-          other_meal: {
-            id: r.other_meal_id,
-            name: r.other_meal_name,
-            image: r.other_meal_image,
-          },
+          my_meal: isUser1
+            ? {
+                id: r.user1_meal_id,
+                name: r.user1_meal_name,
+                image: r.user1_meal_image,
+              }
+            : {
+                id: r.user2_meal_id,
+                name: r.user2_meal_name,
+                image: r.user2_meal_image,
+              },
+
+          other_meal: isUser1
+            ? {
+                id: r.user2_meal_id,
+                name: r.user2_meal_name,
+                image: r.user2_meal_image,
+              }
+            : {
+                id: r.user1_meal_id,
+                name: r.user1_meal_name,
+                image: r.user1_meal_image,
+              },
         };
       }
     }
@@ -181,7 +190,7 @@ export const getChatRoom = async (req, res) => {
     );
 
     // --------------------------------------------------
-    // ✅ RESPONSE
+    // ✅ RESPONSE (FINAL)
     // --------------------------------------------------
     return res.json({
       room: {
@@ -195,7 +204,7 @@ export const getChatRoom = async (req, res) => {
         username: otherUser.username,
         photo: otherUser.photo_url,
       },
-      meal_info: mealInfo, // 👈 ARTIK VAR
+      meal_info: mealInfo, // 👈 FRONTEND ARTIK BUNU GÖRÜR
       messages: messagesResult.rows,
     });
   } catch (err) {
