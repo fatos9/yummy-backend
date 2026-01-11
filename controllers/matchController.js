@@ -146,40 +146,17 @@ export const acceptMatch = async (req, res) => {
       return res.status(400).json({ error: "request_id eksik" });
     }
 
-    // Kullanıcı bilgisi
-    const userInfo = await pool.query(
-      `
-      SELECT last_accept_at, is_premium
-      FROM auth_users
-      WHERE firebase_uid = $1
-      `,
-      [uid]
-    );
-
-    const u = userInfo.rows[0];
-
-    // Premium değilse günlük 1 limit
-    // if (!u.is_premium) {
-    //   const now = new Date();
-    //   const last = u.last_accept_at ? new Date(u.last_accept_at) : null;
-
-    //   if (last && now - last < 24 * 60 * 60 * 1000) {
-    //     return res.status(400).json({
-    //       error: "Günde yalnızca 1 eşleşme kabul edebilirsin."
-    //     });
-    //   }
-    // }
-
-    // İstek doğrulama
+    // İstek doğrula
     const check = await pool.query(
       `
-      SELECT * FROM match_requests
+      SELECT *
+      FROM match_requests
       WHERE id = $1 AND to_user_id = $2
       `,
       [request_id, uid]
     );
 
-    if (check.rows.length === 0) {
+    if (!check.rows.length) {
       return res.status(404).json({ error: "İstek bulunamadı" });
     }
 
@@ -187,11 +164,7 @@ export const acceptMatch = async (req, res) => {
 
     // Kabul et
     await pool.query(
-      `
-      UPDATE match_requests
-      SET status='accepted'
-      WHERE id=$1
-    `,
+      `UPDATE match_requests SET status='accepted' WHERE id=$1`,
       [request_id]
     );
 
@@ -201,74 +174,56 @@ export const acceptMatch = async (req, res) => {
       UPDATE match_requests
       SET status='rejected'
       WHERE to_user_id=$1 AND id != $2 AND status='pending'
-    `,
+      `,
       [uid, request_id]
     );
 
-    // MATCH OLUŞTUR
+    // 🔥 MATCH OLUŞTUR — KRİTİK
     const matchInsert = await pool.query(
       `
-      INSERT INTO matches (meal_id, user1_id, user2_id)
-      VALUES ($1, $2, $3)
+      INSERT INTO matches
+        (
+          user1_id,
+          user2_id,
+          user1_meal_id,
+          user2_meal_id,
+          request_id
+        )
+      VALUES
+        ($1, $2, $3, $4, $5)
       RETURNING *;
-    `,
-      [request.meal_id, request.from_user_id, request.to_user_id]
+      `,
+      [
+        request.from_user_id,   // user1
+        request.to_user_id,     // user2
+        request.sender_meal_id, // user1_meal_id
+        request.meal_id,        // user2_meal_id
+        request.id              // request_id
+      ]
     );
 
     const match = matchInsert.rows[0];
 
-    // ----------------------------------------------
-    // 🔥 BURAYA LOG EKLEDİK — ASIL SORUNUN YERİ
-    // ----------------------------------------------
-
-    console.log("📌 MATCH INSERT RESULT:", match);
-    console.log(
-      "📌 ChatRoom Insert Values:",
-      match.id,
-      match.user1_id,
-      match.user2_id
-    );
-
-    let chatRoom;
-    try {
-      chatRoom = await pool.query(
-        `
-        INSERT INTO chat_rooms (match_id, user1_id, user2_id)
-        VALUES ($1, $2, $3)
-        RETURNING *;
-      `,
-        [match.id, match.user1_id, match.user2_id]
-      );
-    } catch (err) {
-      console.error("🔥 CHAT ROOM INSERT ERROR:", err);
-
-      return res.status(500).json({
-        error: "chat room insert error",
-        details: err.message,
-      });
-    }
-
-    // Kullanıcı son kabul zamanını güncelle
-    await pool.query(
+    // 💬 CHAT ROOM
+    const chatRoom = await pool.query(
       `
-      UPDATE auth_users
-      SET last_accept_at = NOW()
-      WHERE firebase_uid=$1
-    `,
-      [uid]
+      INSERT INTO chat_rooms (match_id, user1_id, user2_id)
+      VALUES ($1, $2, $3)
+      RETURNING *;
+      `,
+      [match.id, match.user1_id, match.user2_id]
     );
 
     return res.json({
       match,
       room: chatRoom.rows[0],
     });
+
   } catch (err) {
     console.error("🔥 Match kabul hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
-
-
 
 /**
  * POST /match/reject
