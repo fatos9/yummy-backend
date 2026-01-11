@@ -5,7 +5,8 @@ import {
   addMeal,
   getMeals,
   getMealById,
-  deleteMeal
+  deleteMeal,
+  getMatchRequestById
 } from "../controllers/mealsController.js";
 
 const router = express.Router();
@@ -24,5 +25,7 @@ router.get("/:id", getMealById);
 
 // Öğün silme (auth zorunlu)
 router.delete("/:id", auth, deleteMeal);
+
+router.get("/match/request/:id", authMiddleware, getMatchRequestById);
 
 export default router;

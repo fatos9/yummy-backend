@@ -166,3 +166,33 @@ export const deleteMeal = async (req, res) => {
     return res.status(500).json({ error: "Server hatası" });
   }
 };
+
+// GET /match/request/:id
+export const getMatchRequestById = async (req, res) => {
+  try {
+    const uid = req.user.uid;
+    const requestId = Number(req.params.id);
+
+    if (Number.isNaN(requestId)) {
+      return res.status(400).json({ error: "Geçersiz request id" });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT id, status
+      FROM match_requests
+      WHERE id = $1 AND to_user_id = $2
+      `,
+      [requestId, uid]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "İstek bulunamadı" });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error("🔥 GET MATCH REQUEST ERROR:", err);
+    return res.status(500).json({ error: "Server hatası" });
+  }
+};
