@@ -177,11 +177,20 @@ export const getMatchRequestById = async (req, res) => {
       return res.status(400).json({ error: "Geçersiz request id" });
     }
 
+    // 1️⃣ Request + meal bilgisi
     const result = await pool.query(
       `
-      SELECT id, status
-      FROM match_requests
-      WHERE id = $1 AND to_user_id = $2
+      SELECT
+        mr.id,
+        mr.status,
+        mr.meal_id,
+        mr.from_user_id,
+        mr.to_user_id,
+        m.user_id AS meal_owner_id
+      FROM match_requests mr
+      JOIN meals m ON m.id = mr.meal_id
+      WHERE mr.id = $1
+        AND mr.to_user_id = $2
       `,
       [requestId, uid]
     );
@@ -190,7 +199,33 @@ export const getMatchRequestById = async (req, res) => {
       return res.status(404).json({ error: "İstek bulunamadı" });
     }
 
-    return res.json(result.rows[0]);
+    const row = result.rows[0];
+
+    // 2️⃣ Ben bu öğün için daha önce istek göndermiş miyim?
+    const sentCheck = await pool.query(
+      `
+      SELECT 1
+      FROM match_requests
+      WHERE meal_id = $1
+        AND from_user_id = $2
+      LIMIT 1
+      `,
+      [row.meal_id, uid]
+    );
+
+    return res.json({
+      request: {
+        id: row.id,
+        status: row.status,
+        meal_id: row.meal_id,
+        from_user_id: row.from_user_id,
+        to_user_id: row.to_user_id,
+      },
+      context: {
+        isOwner: row.meal_owner_id === uid,
+        alreadySent: sentCheck.rows.length > 0,
+      },
+    });
   } catch (err) {
     console.error("🔥 GET MATCH REQUEST ERROR:", err);
     return res.status(500).json({ error: "Server hatası" });
