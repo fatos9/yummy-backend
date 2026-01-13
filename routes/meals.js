@@ -6,7 +6,8 @@ import {
   getMeals,
   getMealById,
   deleteMeal,
-  getMatchRequestById
+  getMatchRequestById,
+  getMatchContextByMeal
 } from "../controllers/mealsController.js";
 
 const router = express.Router();
@@ -27,7 +28,7 @@ router.get("/:id", getMealById);
 router.delete("/:id", auth, deleteMeal);
 
 // router.get("/match/request/:id", auth, getMatchRequestById);
-router.get("/match/context/:mealId", auth, getMatchRequestById);
+router.get("/match/context/:mealId", auth, getMatchContextByMeal);
 
 
 export default router;

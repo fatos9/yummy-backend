@@ -238,9 +238,9 @@ export const getMatchContextByMeal = async (req, res) => {
     const uid = req.user.uid;
     const mealId = Number(req.params.mealId);
 
-    // if (Number.isNaN(mealId)) {
-    //   return res.status(400).json({ error: "Geçersiz meal id" });
-    // }
+    if (Number.isNaN(mealId)) {
+      return res.status(400).json({ error: "Geçersiz meal id" });
+    }
 
     /*
       Bu sorgu şunu yapar:
