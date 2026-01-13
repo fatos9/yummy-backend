@@ -119,7 +119,7 @@ export const getSentMatches = async (req, res) => {
       FROM match_requests mr
       LEFT JOIN auth_users u ON u.firebase_uid = mr.to_user_id
       WHERE mr.from_user_id = $1
-      ORDER BY mr.createdat DESC
+      ORDER BY mr.created_at DESC
       `,
       [uid]
     );
