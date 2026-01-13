@@ -242,14 +242,7 @@ export const getMatchContextByMeal = async (req, res) => {
       return res.status(400).json({ error: "Geçersiz meal id" });
     }
 
-    /*
-      Bu sorgu şunu yapar:
-      - Bu meal ile ilgili
-      - Kullanıcının taraf olduğu
-      - En güncel match_request'i bulur
-    */
-    const result = await pool.query(
-      `
+    const query = `
       SELECT
         mr.id,
         mr.status,
@@ -267,9 +260,46 @@ export const getMatchContextByMeal = async (req, res) => {
         AND ($1 = mr.from_user_id OR $1 = mr.to_user_id)
       ORDER BY mr.created_at DESC
       LIMIT 1
-      `,
-      [uid, mealId]
-    );
+      `;
+
+      console.log("🧠 MATCH CONTEXT QUERY:");
+      console.log(query);
+      console.log("🧩 PARAMS:", {
+        uid,
+        mealId,
+      });
+
+      const result = await pool.query(query, [uid, mealId]);
+
+
+    /*
+      Bu sorgu şunu yapar:
+      - Bu meal ile ilgili
+      - Kullanıcının taraf olduğu
+      - En güncel match_request'i bulur
+    */
+    // const result = await pool.query(
+    //   `
+    //   SELECT
+    //     mr.id,
+    //     mr.status,
+    //     mr.from_user_id,
+    //     mr.to_user_id,
+    //     mr.meal_id,
+    //     mr.sender_meal_id,
+    //     CASE
+    //       WHEN mr.from_user_id = $1 THEN 'sender'
+    //       WHEN mr.to_user_id = $1 THEN 'receiver'
+    //     END AS role
+    //   FROM match_requests mr
+    //   WHERE
+    //     mr.meal_id = $2
+    //     AND ($1 = mr.from_user_id OR $1 = mr.to_user_id)
+    //   ORDER BY mr.created_at DESC
+    //   LIMIT 1
+    //   `,
+    //   [uid, mealId]
+    // );
 
     if (!result.rows.length) {
       return res.json({
