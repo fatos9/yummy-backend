@@ -26,6 +26,8 @@ router.get("/:id", getMealById);
 // Öğün silme (auth zorunlu)
 router.delete("/:id", auth, deleteMeal);
 
-router.get("/match/request/:id", auth, getMatchRequestById);
+// router.get("/match/request/:id", auth, getMatchRequestById);
+router.get("/match/context/:mealId", auth, getMatchRequestById);
+
 
 export default router;
