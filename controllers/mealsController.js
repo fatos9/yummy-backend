@@ -242,81 +242,76 @@ export const getMatchContextByMeal = async (req, res) => {
       return res.status(400).json({ error: "Geçersiz meal id" });
     }
 
+    /* --------------------------------------------------
+       1) MEAL VAR MI + OWNER KONTROLÜ
+       Kendi öğünümse match context YOK
+    -------------------------------------------------- */
+    const mealResult = await pool.query(
+      `SELECT user_id FROM meals WHERE id = $1`,
+      [mealId]
+    );
+
+    if (!mealResult.rows.length) {
+      return res.status(404).json({ error: "Meal not found" });
+    }
+
+    const mealOwnerId = mealResult.rows[0].user_id;
+
+    if (mealOwnerId === uid) {
+      return res.json({
+        isOwnMeal: true,
+      });
+    }
+
+    /* --------------------------------------------------
+       2) MATCH CONTEXT (SADECE CONTEXT_MEAL_ID ÜZERİNDEN)
+    -------------------------------------------------- */
     const query = `
       SELECT
         mr.id,
         mr.status,
         mr.from_user_id,
         mr.to_user_id,
-        mr.meal_id,
         mr.sender_meal_id,
+        mr.meal_id,
         CASE
           WHEN mr.from_user_id = $1 THEN 'sender'
           WHEN mr.to_user_id = $1 THEN 'receiver'
         END AS role
       FROM match_requests mr
       WHERE
-        mr.meal_id = $2
+        mr.context_meal_id = $2
         AND ($1 = mr.from_user_id OR $1 = mr.to_user_id)
       ORDER BY mr.created_at DESC
       LIMIT 1
-      `;
+    `;
 
-      console.log("🧠 MATCH CONTEXT QUERY:");
-      console.log(query);
-      console.log("🧩 PARAMS:", {
-        uid,
-        mealId,
-      });
+    const result = await pool.query(query, [uid, mealId]);
 
-      const result = await pool.query(query, [uid, mealId]);
-
-
-    /*
-      Bu sorgu şunu yapar:
-      - Bu meal ile ilgili
-      - Kullanıcının taraf olduğu
-      - En güncel match_request'i bulur
-    */
-    // const result = await pool.query(
-    //   `
-    //   SELECT
-    //     mr.id,
-    //     mr.status,
-    //     mr.from_user_id,
-    //     mr.to_user_id,
-    //     mr.meal_id,
-    //     mr.sender_meal_id,
-    //     CASE
-    //       WHEN mr.from_user_id = $1 THEN 'sender'
-    //       WHEN mr.to_user_id = $1 THEN 'receiver'
-    //     END AS role
-    //   FROM match_requests mr
-    //   WHERE
-    //     mr.meal_id = $2
-    //     AND ($1 = mr.from_user_id OR $1 = mr.to_user_id)
-    //   ORDER BY mr.created_at DESC
-    //   LIMIT 1
-    //   `,
-    //   [uid, mealId]
-    // );
-
+    /* --------------------------------------------------
+       3) HİÇ MATCH YOK
+    -------------------------------------------------- */
     if (!result.rows.length) {
       return res.json({
+        isOwnMeal: false,
         hasMatch: false,
       });
     }
 
+    /* --------------------------------------------------
+       4) MATCH VAR
+    -------------------------------------------------- */
     const row = result.rows[0];
 
     return res.json({
+      isOwnMeal: false,
       hasMatch: true,
       request: {
         id: row.id,
-        status: row.status,
-        role: row.role,
-        meal_id: row.meal_id,
+        status: row.status, // pending | accepted | rejected
+        role: row.role,     // sender | receiver
         sender_meal_id: row.sender_meal_id,
+        meal_id: row.meal_id,
         from_user_id: row.from_user_id,
         to_user_id: row.to_user_id,
       },
