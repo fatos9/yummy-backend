@@ -1,9 +1,9 @@
 // controllers/mealController.js
 import { pool } from "../db.js";
 
-/**
- * 📌 JSON Parse Helper — DB'de bozuk data olsa bile patlamasını engeller
- */
+/* --------------------------------------------------
+   JSON SAFE HELPER
+-------------------------------------------------- */
 const safeJSON = (value) => {
   if (!value) return null;
   try {
@@ -13,10 +13,12 @@ const safeJSON = (value) => {
   }
 };
 
+/* ==================================================
+   MEALS
+================================================== */
+
 /**
- * --------------------------------------------------------------------
- *  POST /meals → Yeni öğün ekle (FINAL VERSION)
- * --------------------------------------------------------------------
+ * POST /meals
  */
 export const addMeal = async (req, res) => {
   try {
@@ -27,7 +29,7 @@ export const addMeal = async (req, res) => {
       restaurant_name,
       allergens = [],
       user_location = null,
-      restaurant_location = null
+      restaurant_location = null,
     } = req.body;
 
     if (!name || !category) {
@@ -57,43 +59,38 @@ export const addMeal = async (req, res) => {
         category,
         userId,
         restaurant_name || null,
-        allergens,                // ❗ ARRAY olmalı, JSON.stringify değil
-        user_location,            // ❗ JSONB ALANI → stringify etmiyoruz
-        restaurant_location
+        allergens,
+        user_location,
+        restaurant_location,
       ]
     );
 
-    return res.json(inserted.rows[0]);  // ✔ SAF DÖN
+    return res.json(inserted.rows[0]);
   } catch (err) {
     console.error("🔥 Meal ekleme hatası:", err);
-    return res.status(500).json({ error: "Server hatası", detail: err.message });
+    return res.status(500).json({ error: "Server hatası" });
   }
 };
 
-
-
 /**
- * --------------------------------------------------------------------
- *  GET /meals → Tüm öğünleri listele
- * --------------------------------------------------------------------
+ * GET /meals
  */
 export const getMeals = async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT *
       FROM meals
-      ORDER BY createdat DESC
+      ORDER BY created_at DESC
     `);
 
-    const meals = result.rows.map((meal) => ({
-      ...meal,
-      allergens: safeJSON(meal.allergens),
-      user_location: safeJSON(meal.user_location),
-      restaurant_location: safeJSON(meal.restaurant_location)
-    }));
-
-    return res.json(meals);
-
+    return res.json(
+      result.rows.map((meal) => ({
+        ...meal,
+        allergens: safeJSON(meal.allergens),
+        user_location: safeJSON(meal.user_location),
+        restaurant_location: safeJSON(meal.restaurant_location),
+      }))
+    );
   } catch (err) {
     console.error("🔥 Meal listeleme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
@@ -101,20 +98,18 @@ export const getMeals = async (req, res) => {
 };
 
 /**
- * --------------------------------------------------------------------
- *  GET /meals/:id → Tekil meal detayı
- * --------------------------------------------------------------------
+ * GET /meals/:id
  */
 export const getMealById = async (req, res) => {
   try {
-    const mealId = req.params.id;
+    const mealId = Number(req.params.id);
 
     const result = await pool.query(
       `SELECT * FROM meals WHERE id = $1 LIMIT 1`,
       [mealId]
     );
 
-    if (result.rows.length === 0) {
+    if (!result.rows.length) {
       return res.status(404).json({ error: "Öğün bulunamadı" });
     }
 
@@ -124,9 +119,8 @@ export const getMealById = async (req, res) => {
       ...meal,
       allergens: safeJSON(meal.allergens),
       user_location: safeJSON(meal.user_location),
-      restaurant_location: safeJSON(meal.restaurant_location)
+      restaurant_location: safeJSON(meal.restaurant_location),
     });
-
   } catch (err) {
     console.error("🔥 Meal detay hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
@@ -134,22 +128,19 @@ export const getMealById = async (req, res) => {
 };
 
 /**
- * --------------------------------------------------------------------
- *  DELETE /meals/:id → Kullanıcı kendi meal’ini silebilir
- * --------------------------------------------------------------------
+ * DELETE /meals/:id
  */
 export const deleteMeal = async (req, res) => {
   try {
-    const mealId = req.params.id;
+    const mealId = Number(req.params.id);
     const userId = req.user.uid;
 
-    // Meal sahibini kontrol et
     const check = await pool.query(
-      `SELECT user_id FROM meals WHERE id = $1 LIMIT 1`,
+      `SELECT user_id FROM meals WHERE id = $1`,
       [mealId]
     );
 
-    if (check.rows.length === 0) {
+    if (!check.rows.length) {
       return res.status(404).json({ error: "Öğün bulunamadı" });
     }
 
@@ -160,118 +151,94 @@ export const deleteMeal = async (req, res) => {
     await pool.query(`DELETE FROM meals WHERE id = $1`, [mealId]);
 
     return res.json({ success: true });
-
   } catch (err) {
     console.error("🔥 Meal silme hatası:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
 
-// GET /match/request/:id
-export const getMatchRequestById = async (req, res) => {
+/* ==================================================
+   MATCH
+================================================== */
+
+/**
+ * POST /match/send
+ */
+export const sendMatchRequest = async (req, res) => {
   try {
     const uid = req.user.uid;
-    const requestId = Number(req.params.id);
+    const { to_user_id, meal_id } = req.body;
 
-    if (Number.isNaN(requestId)) {
-      return res.status(400).json({ error: "Geçersiz request id" });
+    if (!to_user_id || !meal_id) {
+      return res.status(400).json({ error: "Eksik parametre" });
     }
 
-    // 1️⃣ Request + meal bilgisi
-    const result = await pool.query(
+    // sender meal
+    const senderMeal = await pool.query(
       `
-      SELECT
-        mr.id,
-        mr.status,
-        mr.meal_id,
-        mr.from_user_id,
-        mr.to_user_id,
-        m.user_id AS meal_owner_id
-      FROM match_requests mr
-      JOIN meals m ON m.id = mr.meal_id
-      WHERE mr.id = $1
-        AND mr.to_user_id = $2
-      `,
-      [requestId, uid]
-    );
-
-    if (!result.rows.length) {
-      return res.status(404).json({ error: "İstek bulunamadı" });
-    }
-
-    const row = result.rows[0];
-
-    // 2️⃣ Ben bu öğün için daha önce istek göndermiş miyim?
-    const sentCheck = await pool.query(
-      `
-      SELECT 1
-      FROM match_requests
-      WHERE meal_id = $1
-        AND from_user_id = $2
+      SELECT id
+      FROM meals
+      WHERE user_id = $1
+      ORDER BY created_at DESC
       LIMIT 1
       `,
-      [row.meal_id, uid]
+      [uid]
     );
 
-    return res.json({
-      request: {
-        id: row.id,
-        status: row.status,
-        meal_id: row.meal_id,
-        from_user_id: row.from_user_id,
-        to_user_id: row.to_user_id,
-      },
-      context: {
-        isOwner: row.meal_owner_id === uid,
-        alreadySent: sentCheck.rows.length > 0,
-      },
-    });
+    if (!senderMeal.rows.length) {
+      return res.status(400).json({ error: "Gönderenin öğünü yok" });
+    }
+
+    const senderMealId = senderMeal.rows[0].id;
+
+    const inserted = await pool.query(
+      `
+      INSERT INTO match_requests (
+        from_user_id,
+        to_user_id,
+        meal_id,
+        sender_meal_id,
+        context_meal_id
+      )
+      VALUES ($1,$2,$3,$4,$5)
+      RETURNING id
+      `,
+      [uid, to_user_id, meal_id, senderMealId, meal_id]
+    );
+
+    return res.json({ id: inserted.rows[0].id });
   } catch (err) {
-    console.error("🔥 GET MATCH REQUEST ERROR:", err);
+    console.error("🔥 MATCH SEND ERROR:", err);
     return res.status(500).json({ error: "Server hatası" });
   }
 };
 
-// GET /match/context/:mealId
+/**
+ * GET /match/context/:mealId
+ */
 export const getMatchContextByMeal = async (req, res) => {
   try {
     const uid = req.user.uid;
     const mealId = Number(req.params.mealId);
 
-    if (Number.isNaN(mealId)) {
-      return res.status(400).json({ error: "Geçersiz meal id" });
-    }
-
-    /* --------------------------------------------------
-       1) MEAL VAR MI + OWNER KONTROLÜ
-       Kendi öğünümse match context YOK
-    -------------------------------------------------- */
-    const mealResult = await pool.query(
+    const meal = await pool.query(
       `SELECT user_id FROM meals WHERE id = $1`,
       [mealId]
     );
 
-    if (!mealResult.rows.length) {
+    if (!meal.rows.length) {
       return res.status(404).json({ error: "Meal not found" });
     }
 
-    const mealOwnerId = mealResult.rows[0].user_id;
-
-    if (mealOwnerId === uid) {
-      return res.json({
-        isOwnMeal: true,
-      });
+    if (meal.rows[0].user_id === uid) {
+      return res.json({ isOwnMeal: true });
     }
 
-    /* --------------------------------------------------
-       2) MATCH CONTEXT (SADECE CONTEXT_MEAL_ID ÜZERİNDEN)
-    -------------------------------------------------- */
-    const query = `
+    const result = await pool.query(
+      `
       SELECT
         mr.id,
         mr.status,
-        mr.from_user_id,
-        mr.to_user_id,
         mr.sender_meal_id,
         mr.meal_id,
         CASE
@@ -284,23 +251,14 @@ export const getMatchContextByMeal = async (req, res) => {
         AND ($1 = mr.from_user_id OR $1 = mr.to_user_id)
       ORDER BY mr.created_at DESC
       LIMIT 1
-    `;
+      `,
+      [uid, mealId]
+    );
 
-    const result = await pool.query(query, [uid, mealId]);
-
-    /* --------------------------------------------------
-       3) HİÇ MATCH YOK
-    -------------------------------------------------- */
     if (!result.rows.length) {
-      return res.json({
-        isOwnMeal: false,
-        hasMatch: false,
-      });
+      return res.json({ isOwnMeal: false, hasMatch: false });
     }
 
-    /* --------------------------------------------------
-       4) MATCH VAR
-    -------------------------------------------------- */
     const row = result.rows[0];
 
     return res.json({
@@ -308,12 +266,10 @@ export const getMatchContextByMeal = async (req, res) => {
       hasMatch: true,
       request: {
         id: row.id,
-        status: row.status, // pending | accepted | rejected
-        role: row.role,     // sender | receiver
+        status: row.status,
+        role: row.role,
         sender_meal_id: row.sender_meal_id,
         meal_id: row.meal_id,
-        from_user_id: row.from_user_id,
-        to_user_id: row.to_user_id,
       },
     });
   } catch (err) {
